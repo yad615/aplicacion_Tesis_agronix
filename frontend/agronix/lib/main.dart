@@ -69,7 +69,7 @@ class AgroNixApp extends StatelessWidget {
         '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/dashboard':(context) => const DashboardScreen()
+        '/dashboard':(context) => const DashboardScreen(userData: {},)
       },
     );
   }
