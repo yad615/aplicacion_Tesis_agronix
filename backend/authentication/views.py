@@ -34,22 +34,32 @@ def register(request):
         email = data['email']
         password = data['password']
         
-        logger.info(f"Intento de registro para usuario: {username}")
-        
-        # Verificar si el usuario ya existe
-        if User.objects.filter(username=username).exists() or User.objects.filter(email=email).exists():
-            logger.warning(f"Usuario o email ya existe: {username}")
+        # Validación adicional del dominio
+        if not email.endswith('@agronix.com'):
             return Response({
                 'success': False,
-                'message': 'Usuario o email ya existe'
+                'message': 'Solo se permiten emails con dominio @agronix.com'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Crear usuario
-        password_hash = get_password_hash(password)
+        # Verificar si el usuario ya existe
+        if User.objects.filter(username=username).exists():
+            return Response({
+                'success': False,
+                'message': 'El nombre de usuario ya está en uso'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if User.objects.filter(email=email).exists():
+            return Response({
+                'success': False,
+                'message': 'El email ya está registrado'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Crear el usuario
+        hashed_password = get_password_hash(password)
         user = User.objects.create(
             username=username,
             email=email,
-            password_hash=password_hash,
+            password_hash=hashed_password,
             is_active=True
         )
         
@@ -65,7 +75,7 @@ def register(request):
         logger.error(f"Error interno en registro: {str(e)}")
         return Response({
             'success': False,
-            'message': f'Error interno del servidor: {str(e)}'
+            'message': 'Error interno del servidor'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
@@ -139,7 +149,7 @@ def login(request):
         logger.error(f"Error interno en login: {str(e)}")
         return Response({
             'success': False,
-            'message': f'Error interno del servidor: {str(e)}'
+            'message': 'Error interno del servidor'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])

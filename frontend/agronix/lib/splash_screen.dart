@@ -21,18 +21,17 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-    
-    // Configurar animaciones
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    
+
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    
+
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -62,22 +61,18 @@ class _SplashScreenState extends State<SplashScreen>
       curve: Curves.easeOutCubic,
     ));
 
-    // Iniciar animaciones
     _startAnimations();
   }
 
   void _startAnimations() async {
-    // Vibración suave al iniciar
     HapticFeedback.lightImpact();
-    
-    // Iniciar animaciones en secuencia
+
     _scaleController.forward();
     await Future.delayed(const Duration(milliseconds: 200));
     _fadeController.forward();
     await Future.delayed(const Duration(milliseconds: 300));
     _slideController.forward();
-    
-    // Esperar un poco más y navegar
+
     await Future.delayed(const Duration(milliseconds: 2500));
     _navigateToLogin();
   }
@@ -85,7 +80,8 @@ class _SplashScreenState extends State<SplashScreen>
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const LoginScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
@@ -117,130 +113,90 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0D4F3C), // Verde oscuro
-              Color(0xFF1B5E4F), // Verde medio
-              Color(0xFF2A6B5F), // Verde más claro
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Efectos de fondo animados
-            _buildBackgroundEffects(),
-            
-            // Contenido principal
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo animado
-                  SlideTransition(
-                    position: _slideAnimation,
-                    child: ScaleTransition(
-                      scale: _scaleAnimation,
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Container(
-                          width: 180,
-                          height: 180,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                              BoxShadow(
-                                color: const Color(0xFF4CAF50).withOpacity(0.3),
-                                blurRadius: 40,
-                                offset: const Offset(0, 0),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                              ),
-                              padding: const EdgeInsets.all(20),
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Nombre de la app
-                  SlideTransition(
-                    position: _slideAnimation,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [
-                            Colors.white,
-                            Color(0xFF4CAF50),
-                          ],
-                        ).createShader(bounds),
-                        child: const Text(
-                          'AgroNix',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 60),
-                  
-                  // Indicador de carga
-                  FadeTransition(
+        color: const Color(0xFF0D4F3C), // Verde sólido exacto del Figma
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SlideTransition(
+                position: _slideAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: FadeTransition(
                     opacity: _fadeAnimation,
-                    child: const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF4CAF50),
+                    child: Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.transparent, // Fondo transparente
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                          BoxShadow(
+                            color: const Color(0xFF4CAF50).withOpacity(0.3),
+                            blurRadius: 40,
+                            offset: const Offset(0, 0),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-            
-            // Toque para continuar (opcional)
-            Positioned(
-              bottom: 80,
-              left: 0,
-              right: 0,
-              child: FadeTransition(
+              const SizedBox(height: 40),
+              SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: const Text(
+                    'AgroNix',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 60),
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF4CAF50),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 120),
+              FadeTransition(
                 opacity: _fadeAnimation,
                 child: GestureDetector(
                   onTap: _navigateToLogin,
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 40),
-                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.transparent,
                       borderRadius: BorderRadius.circular(25),
                       border: Border.all(
                         color: Colors.white.withOpacity(0.3),
@@ -253,69 +209,16 @@ class _SplashScreenState extends State<SplashScreen>
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 16,
-                        fontWeight: FontWeight.w300,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildBackgroundEffects() {
-    return Stack(
-      children: [
-        // Círculos decorativos animados
-        Positioned(
-          top: -50,
-          right: -50,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: -80,
-          left: -80,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF4CAF50).withOpacity(0.1),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 200,
-          left: -30,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.03),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
