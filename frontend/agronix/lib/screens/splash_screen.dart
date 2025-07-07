@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'login_screen.dart'; // Asegúrate de que esta ruta sea correcta
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -113,7 +113,7 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        color: const Color(0xFF0D4F3C), // Verde sólido exacto del Figma
+        color: const Color(0xFF0D4F3C),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -129,7 +129,7 @@ class _SplashScreenState extends State<SplashScreen>
                       height: 180,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.transparent, // Fondo transparente
+                        color: Colors.transparent,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.3),

@@ -10,4 +10,5 @@ urlpatterns = [
     path('', root_view, name='root'),
     path('auth/', include('authentication.urls')),
     path('users/', include('authentication.urls')),
+    path('api/chat/', include('chatbot_api.urls')), 
 ]

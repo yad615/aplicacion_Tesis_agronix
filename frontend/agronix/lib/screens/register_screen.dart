@@ -37,7 +37,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validar dominio de email antes de enviar
     String email = _emailController.text.trim();
     if (!email.endsWith('@agronix.com')) {
       _showErrorDialog('Solo se permiten emails con dominio @agronix.com');
@@ -66,15 +65,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final responseData = jsonDecode(response.body);
       
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Verificar si la respuesta indica éxito
         if (responseData['success'] == true) {
           _showSuccessDialog();
         } else {
-          // Aunque el status code sea 200/201, puede haber un error en la lógica
           _showErrorDialog(responseData['message'] ?? 'Error desconocido en el registro');
         }
       } else {
-        // Manejar errores HTTP
         String errorMessage = 'Error en el registro';
         
         if (responseData.containsKey('message')) {
@@ -82,7 +78,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         } else if (responseData.containsKey('error')) {
           errorMessage = responseData['error'];
         } else if (responseData.containsKey('errors')) {
-          // Manejar errores de validación del serializer
           var errors = responseData['errors'];
           if (errors is Map) {
             List<String> errorMessages = [];
@@ -172,10 +167,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Espacio superior más pequeño
               const SizedBox(height: 60),
               
-              // Contenedor principal que ocupa todo el resto del espacio
               Expanded(
                 child: Container(
                   width: double.infinity,
@@ -191,7 +184,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        // Título
                         const Text(
                           'Registrarse',
                           style: TextStyle(
@@ -202,12 +194,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Campos distribuidos uniformemente sin scroll
                         Expanded(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              // Campo Email
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -240,7 +230,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ],
                               ),
 
-                              // Campo Nombres
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -272,7 +261,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ],
                               ),
 
-                              // Campo Contraseña
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -302,7 +290,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ],
                               ),
 
-                              // Campo Confirmar Contraseña
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -335,7 +322,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
 
-                        // Botón de Registro
                         SizedBox(
                           width: double.infinity,
                           height: 50,
@@ -369,7 +355,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Divider
                         const Text(
                           'entrar con',
                           style: TextStyle(
@@ -379,7 +364,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Gmail Button
                         GestureDetector(
                           onTap: _openGmailSignup,
                           child: Container(
@@ -408,7 +392,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Link para ir al login
                         GestureDetector(
                           onTap: () => Navigator.of(context).pop(),
                           child: RichText(

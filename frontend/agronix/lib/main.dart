@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
-import 'login_screen.dart';
-import 'register_screen.dart'; 
-import 'dashboard_screen.dart';
-import 'splash_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart'; 
+import 'screens/dashboard_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/alerts_screen.dart';
+import 'screens/calendar_screen.dart';
+import 'screens/chatbot_screen.dart';  
+import 'screens/settings_screen.dart';
+import 'screens/statistics_screen.dart';
+import 'screens/profile_screen.dart'; 
 
-
-
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 void main() {
   runApp(const AgroNixApp());
 }
@@ -69,7 +75,8 @@ class AgroNixApp extends StatelessWidget {
         '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/dashboard':(context) => const DashboardScreen(userData: {},)
+        '/dashboard': (context) => const DashboardScreen(userData: {}),
+        '/profile': (context) => const ProfileScreen(userData: {}),
       },
     );
   }

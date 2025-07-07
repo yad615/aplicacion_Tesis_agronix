@@ -1,13 +1,13 @@
 from django.urls import path
-from . import views
+from .views import register, LoginView, verify_connection, list_users, get_user_info
 
 urlpatterns = [
     # Auth endpoints
-    path('register', views.register, name='register'),
-    path('login', views.login, name='login'),
-    path('verify', views.verify_connection, name='verify_connection'),
+    path('register', register, name='register'),
+    path('login/', LoginView.as_view(), name='login'), 
+    path('verify', verify_connection, name='verify_connection'),
     
     # User endpoints
-    path('list', views.list_users, name='list_users'),
-    path('<str:username>', views.get_user_info, name='get_user_info'),
+    path('list', list_users, name='list_users'),
+    path('<str:username>', get_user_info, name='get_user_info'),
 ]
