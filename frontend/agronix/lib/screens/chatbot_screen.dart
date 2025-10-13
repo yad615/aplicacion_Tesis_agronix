@@ -28,7 +28,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
   late Animation<double> _typingAnimation;
 
   final String _djangoBaseUrl = 'http://10.0.2.2:8000';
-  final String _chatbotEndpoint = '/api/chat/';
+  final String _chatbotEndpoint = '/chatbot/';
 
   @override
   void initState() {
@@ -208,10 +208,10 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
     try {
       final response = await http.post(
         Uri.parse('$_djangoBaseUrl$_chatbotEndpoint'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $userToken',
-        },
+         headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Token $userToken', // <-- CORRECTO
+  },
         body: json.encode({
           'message': text,
         }),

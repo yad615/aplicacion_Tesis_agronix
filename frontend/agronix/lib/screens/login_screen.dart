@@ -93,36 +93,36 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
       final responseData = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && responseData['success']) {
-        final String accessToken = responseData['data']['access_token'];
+        if (response.statusCode == 200 && responseData.containsKey('token')) {
+      final String accessToken = responseData['token']; 
 
-        final Map<String, dynamic> userData = {
-          'username': responseData['data']['user']['username'],
-          'email': responseData['data']['user']['email'],
-          'id': responseData['data']['user']['id'],
-          'token': accessToken,
-        };
-
-        _showSuccessDialog();
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DashboardScreen(userData: userData),
-          ),
-        );
-      } else {
-        _showErrorDialog(responseData['message'] ?? 'Error de autenticación');
-        print('Error de Login API: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      _showErrorDialog('Error de conexión: $e. Verifica tu conexión a internet o el servidor.');
-      print('Excepción en LoginScreen: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      final Map<String, dynamic> userData = {
+        'username': responseData['user']['username'],
+        'email': responseData['user']['email'],
+        'id': responseData['user']['user_id'], 
+        'token': accessToken,
+      };
+      
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(userData: userData),
+        ),
+      );
+    } else {
+      _showErrorDialog(responseData['detail'] ?? 'Error de autenticación');
+      print('Error de Login API: ${response.statusCode} - ${response.body}');
     }
+  } catch (e) {
+    _showErrorDialog('Error de conexión: $e. Verifica tu conexión a internet o el servidor.');
+    print('Excepción en LoginScreen: $e');
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
   }
 
   void _showSuccessDialog() {

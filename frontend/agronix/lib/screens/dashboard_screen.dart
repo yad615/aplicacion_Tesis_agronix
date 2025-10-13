@@ -1,38 +1,33 @@
-// lib/screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:math'; // Para generar datos aleatorios
+import 'dart:math';
 
-// Importa las otras pantallas
 import 'package:agronix/screens/statistics_screen.dart';
 import 'package:agronix/screens/alerts_screen.dart';
 import 'package:agronix/screens/calendar_screen.dart';
 import 'package:agronix/screens/settings_screen.dart';
 import 'package:agronix/screens/profile_screen.dart';
 import 'package:agronix/screens/chatbot_screen.dart';
-
-// Importa widgets específicos del dashboard
+import 'package:agronix/screens/parcelas_screen.dart' hide Expanded, Column, IconButton;
 import 'package:agronix/widgets/dashboard_widgets.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
 
-  const DashboardScreen({Key? key, required this.userData}) : super(key: key);
+  const DashboardScreen({super.key, required this.userData});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with TickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _slideAnimation;
 
   int _selectedIndex = 0;
-  late List<Widget> _screens;
 
   // Datos del cultivo que se cargarán del backend
   Map<String, dynamic>? _cropData;
@@ -50,18 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     _setupAnimations();
     _startAnimations();
-    _initializeScreens();
     _loadInitialData();
-  }
-
-  void _initializeScreens() {
-    _screens = [
-      _buildDashboardContent(),
-      StatisticsScreen(userData: widget.userData),
-      AlertsScreen(userData: widget.userData),
-      CalendarScreen(userData: widget.userData),
-      SettingsScreen(userData: widget.userData),
-    ];
   }
 
   void _setupAnimations() {
@@ -96,6 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final String? userToken = widget.userData['token'] as String?;
     if (userToken == null || userToken.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _lastUpdateMessage = 'Error: No autenticado.';
@@ -112,15 +97,15 @@ class _DashboardScreenState extends State<DashboardScreen>
         },
       );
       
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
         
-        // Verificar que la respuesta sea exitosa
         if (responseData['success'] == true && responseData.containsKey('crop_data')) {
           setState(() {
             _cropData = responseData['crop_data'];
             
-            // Convertir last_updated string a DateTime si es necesario
             if (_cropData!['last_updated'] is String) {
               _cropData!['last_updated'] = DateTime.parse(_cropData!['last_updated']);
             }
@@ -129,7 +114,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             _updateAlertsBasedOnData();
           });
         } else {
-          print("Backend no devolvió datos válidos: ${responseData}");
+          print("Backend no devolvió datos válidos: $responseData");
           await _generateFreshSimulatedData();
         }
       } else {
@@ -138,15 +123,18 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
     } catch (e) {
       print('Excepción: $e');
-      await _generateFreshSimulatedData();
+      if (mounted) {
+        await _generateFreshSimulatedData();
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // NUEVO: Método para generar datos dinámicos como el chatbot
   Future<void> _generateFreshSimulatedData() async {
     setState(() {
       _cropData = {
@@ -164,7 +152,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  // NUEVO: Método para refrescar datos
   Future<void> _refreshData() async {
     await _loadInitialData();
   }
@@ -186,7 +173,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
     }
 
-    // Alertas basadas en humedad del suelo
     if (_cropData!['humidity_soil'] < 35.0) {
       newAlerts.add({
         'message': '💧 Humedad del suelo baja: ${_cropData!['humidity_soil']}%',
@@ -199,7 +185,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
     }
 
-    // Alertas basadas en conductividad
     if (_cropData!['conductivity_ec'] < 0.7) {
       newAlerts.add({
         'message': '⚡ Conductividad baja: ${_cropData!['conductivity_ec']} dS/m',
@@ -212,7 +197,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
     }
 
-    // Alertas basadas en riesgo de plagas
     if (_cropData!['pest_risk'] == 'Alto') {
       newAlerts.add({
         'message': '🐛 Riesgo de plagas alto - Inspección necesaria',
@@ -225,7 +209,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
     }
 
-    // Alertas programadas fijas (ejemplo)
     newAlerts.add({
       'message': '📅 Cosecha programada mañana 8:00 a.m.',
       'type': 'schedule', 'color': Colors.blue, 'icon': Icons.calendar_today, 'isNew': false
@@ -236,7 +219,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  // Método para obtener el estado de un parámetro (para las tarjetas)
   String _getParameterStatus(String parameter, double value) {
     switch (parameter) {
       case 'temperature_air':
@@ -270,7 +252,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  // Método para obtener el color del estado (para las tarjetas)
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Óptimo':
@@ -296,7 +277,22 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           children: [
             _buildHeader(),
-            Expanded(child: _screens[_selectedIndex]),
+            // **CORRECCIÓN PRINCIPAL APLICADA AQUÍ**
+            // Se usa IndexedStack para mostrar la pantalla correcta y mantener el estado
+            // de las otras pantallas al navegar entre ellas.
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: <Widget>[
+                  _buildDashboardContent(),
+                  StatisticsScreen(userData: widget.userData),
+                  ParcelasScreen(userData: widget.userData),
+                  AlertsScreen(userData: widget.userData),
+                  CalendarScreen(userData: widget.userData),
+                  SettingsScreen(userData: widget.userData),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -304,8 +300,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       bottomNavigationBar: _buildBottomNavigation(),
     );
   }
-
-  // Header con botón de refresh
+  
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -356,24 +351,23 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ),
-          // Botón de refresh
           IconButton(
             onPressed: _isLoading ? null : _refreshData,
             icon: _isLoading 
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Icon(Icons.refresh, color: Colors.white),
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.refresh, color: Colors.white),
           ),
           IconButton(
             onPressed: () {
               setState(() {
-                _selectedIndex = 2;
+                _selectedIndex = 3; 
               });
             },
             icon: Stack(
@@ -459,8 +453,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(width: 8),
           Text(
             _isLoading 
-              ? 'Cargando datos...'
-              : _lastUpdateMessage,
+            ? 'Cargando datos...'
+            : _lastUpdateMessage,
             style: TextStyle(
               color: _isLoading ? Colors.grey : const Color(0xFF4A9B8E),
               fontSize: 12,
@@ -591,7 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             TextButton(
               onPressed: () {
                 setState(() {
-                  _selectedIndex = 2;
+                  _selectedIndex = 3; 
                 });
               },
               child: const Text(
@@ -731,12 +725,12 @@ class _DashboardScreenState extends State<DashboardScreen>
               onTap: () => _showActionDialog(),
             ),
             DashboardWidgets.buildQuickActionButton(
-              'Calendario',
-              Icons.calendar_today,
-              Colors.blue,
+              'Parcelas',
+              Icons.landscape,
+              Colors.green,
               onTap: () {
                 setState(() {
-                  _selectedIndex = 3;
+                  _selectedIndex = 2;
                 });
               },
             ),
@@ -797,6 +791,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           BottomNavigationBarItem(
             icon: Icon(Icons.analytics),
             label: 'Estadísticas',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.landscape),
+            label: 'Parcelas',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.notifications),

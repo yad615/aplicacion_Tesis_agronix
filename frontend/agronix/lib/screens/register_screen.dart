@@ -48,7 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      const String apiUrl = 'http://10.0.2.2:8000/auth/register';
+      const String apiUrl =  'http://10.0.2.2:8000/auth/register/';
       
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -59,16 +59,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'username': _usernameController.text.trim(),
           'email': email,
           'password': _passwordController.text,
+           'first_name':_usernameController.text.trim(), 
         }),
       );
 
       final responseData = jsonDecode(response.body);
       
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (responseData['success'] == true) {
-          _showSuccessDialog();
+        if (responseData.containsKey('token')) {
+            _showSuccessDialog();
         } else {
-          _showErrorDialog(responseData['message'] ?? 'Error desconocido en el registro');
+            _showErrorDialog(responseData['message'] ?? 'Error desconocido en el registro');
         }
       } else {
         String errorMessage = 'Error en el registro';
@@ -234,7 +235,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Nombres:',
+                                    'Nombre de Usuario:',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,

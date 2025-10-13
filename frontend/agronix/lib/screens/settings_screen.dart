@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'profile_screen.dart'; 
+import 'package:agronix/services/api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -237,32 +238,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          '¿Estás seguro de que quieres cerrar sesión?',
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Cerrar Sesión'),
-          ),
-        ],
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: const Color(0xFF2A2A2A),
+      title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.white)),
+      content: const Text(
+        '¿Estás seguro de que quieres cerrar sesión?',
+        style: TextStyle(color: Colors.grey),
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            final String? token = widget.userData['token'];
+            if (token == null) return;
+
+            try {
+              await ApiService.logout(token);
+              Navigator.pop(dialogContext);
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+            } catch (e) {
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Error al cerrar sesión. Inténtalo de nuevo.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Cerrar Sesión'),
+        ),
+      ],
+    ),
+  );
+}
+
 
   void _showAboutDialog() {
     showDialog(

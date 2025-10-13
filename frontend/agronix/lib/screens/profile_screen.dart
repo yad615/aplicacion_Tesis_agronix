@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:agronix/services/api_service.dart'; // Importa tu servicio de API
 
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -11,26 +12,88 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool isEditing = false;
+  
+  // Controladores para los campos del formulario
   late TextEditingController usernameController;
   late TextEditingController emailController;
-  late TextEditingController fullNameController;
+  late TextEditingController nombresController;
+  late TextEditingController apellidosController;
 
+  bool _isLoading = true; // Para el indicador de carga inicial
+  
   @override
   void initState() {
     super.initState();
-    usernameController = TextEditingController(text: widget.userData['username'] ?? '');
-    emailController = TextEditingController(text: widget.userData['email'] ?? '');
-    fullNameController = TextEditingController(
-      text: widget.userData['full_name'] ??
-          '${widget.userData['first_name'] ?? ''} ${widget.userData['last_name'] ?? ''}'.trim(),
-    );
+    // Inicializamos los controladores vacíos primero
+    usernameController = TextEditingController();
+    emailController = TextEditingController();
+    nombresController = TextEditingController();
+    apellidosController = TextEditingController();
+    
+    // Llamamos a la función para cargar los datos desde la API
+    _loadProfileData();
+  }
+
+  // Función para CARGAR los datos desde la API
+  Future<void> _loadProfileData() async {
+    setState(() { _isLoading = true; });
+
+    final token = widget.userData['token'] as String?;
+    if (token == null) return;
+
+    try {
+      final data = await ApiService.fetchUserProfile(token);
+      final profile = data['profile'];
+
+      // Rellenamos los controladores con los datos frescos de la API
+      setState(() {
+        usernameController.text = data['username'] ?? '';
+        emailController.text = data['email'] ?? '';
+        nombresController.text = profile['nombres'] ?? '';
+        apellidosController.text = profile['apellidos'] ?? '';
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al cargar perfil: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() { _isLoading = false; });
+    }
+  }
+
+  // Función para GUARDAR los datos en la API
+  Future<void> _saveProfile() async {
+    final token = widget.userData['token'] as String?;
+    if (token == null) return;
+
+    // Creamos el mapa de datos que espera tu API
+    final Map<String, dynamic> updatedData = {
+      'nombres': nombresController.text,
+      'apellidos': apellidosController.text,
+    };
+
+    try {
+      // Llamamos al servicio para actualizar el perfil
+      await ApiService.updateUserProfile(token, updatedData);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Perfil actualizado exitosamente'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar el perfil: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
   void dispose() {
     usernameController.dispose();
     emailController.dispose();
-    fullNameController.dispose();
+    nombresController.dispose();
+    apellidosController.dispose();
     super.dispose();
   }
 
@@ -44,13 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              if (isEditing) {
+                await _saveProfile();
+              }
               setState(() {
                 isEditing = !isEditing;
               });
-              if (!isEditing) {
-                _saveProfile();
-              }
             },
             child: Text(
               isEditing ? 'Guardar' : 'Editar',
@@ -59,18 +122,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            _buildProfileHeader(),
-            const SizedBox(height: 30),
-            _buildProfileForm(),
-            const SizedBox(height: 30),
-            _buildProfileStats(),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  _buildProfileHeader(),
+                  const SizedBox(height: 30),
+                  _buildProfileForm(),
+                  const SizedBox(height: 30),
+                  _buildProfileStats(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -83,7 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               radius: 60,
               backgroundColor: const Color(0xFF4A9B8E),
               child: Text(
-                widget.userData['username']?.substring(0, 1).toUpperCase() ?? 'U',
+                usernameController.text.isNotEmpty ? usernameController.text.substring(0, 1).toUpperCase() : 'U',
                 style: const TextStyle(fontSize: 50, color: Colors.white),
               ),
             ),
@@ -108,7 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          widget.userData['username'] ?? 'Usuario',
+          usernameController.text,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -138,19 +203,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Nombre de Usuario',
             usernameController,
             Icons.person,
-            enabled: isEditing,
+            enabled: false,
           ),
           _buildDivider(),
           _buildProfileField(
             'Correo Electrónico',
             emailController,
             Icons.email,
+            enabled: false,
+          ),
+          _buildDivider(),
+          _buildProfileField(
+            'Nombres',
+            nombresController,
+            Icons.badge,
             enabled: isEditing,
           ),
           _buildDivider(),
           _buildProfileField(
-            'Nombre Completo',
-            fullNameController,
+            'Apellidos',
+            apellidosController,
             Icons.badge,
             enabled: isEditing,
           ),
@@ -253,15 +325,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Perfil actualizado exitosamente'),
-        backgroundColor: Color(0xFF4A9B8E),
       ),
     );
   }
