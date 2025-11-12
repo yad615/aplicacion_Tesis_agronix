@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:agronix/screens/dashboard_screen.dart';
+import 'package:agronix/services/endpoints/endpoints.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -24,13 +26,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   late Animation<Offset> _slideUpAnimation;
   late Animation<double> _backgroundParallaxAnimation;
 
-  final String _loginUrl = 'http://10.0.2.2:8000/auth/login/';
-
   @override
   void initState() {
     super.initState();
     _setupAnimations();
     _startAnimations();
+    _checkSavedSession();
   }
 
   void _setupAnimations() {
@@ -80,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
     try {
       final response = await http.post(
-        Uri.parse(_loginUrl),
+        Uri.parse(AuthEndpoints.login),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -93,60 +94,65 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
       final responseData = jsonDecode(response.body);
 
-        if (response.statusCode == 200 && responseData.containsKey('token')) {
-      final String accessToken = responseData['token']; 
+      if (response.statusCode == 200 && responseData.containsKey('token')) {
+        final String accessToken = responseData['token'];
 
-      final Map<String, dynamic> userData = {
-        'username': responseData['user']['username'],
-        'email': responseData['user']['email'],
-        'id': responseData['user']['user_id'], 
-        'token': accessToken,
-      };
-      
-      
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DashboardScreen(userData: userData),
-        ),
-      );
-    } else {
-      _showErrorDialog(responseData['detail'] ?? 'Error de autenticación');
-      print('Error de Login API: ${response.statusCode} - ${response.body}');
-    }
-  } catch (e) {
-    _showErrorDialog('Error de conexión: $e. Verifica tu conexión a internet o el servidor.');
-    print('Excepción en LoginScreen: $e');
-  } finally {
-    setState(() {
-      _isLoading = false;
-    });
-  }
+        final Map<String, dynamic> userData = {
+          'username': responseData['user']['username'],
+          'email': responseData['user']['email'],
+          'id': responseData['user']['user_id'],
+          'token': accessToken,
+        };
 
-  }
+        // Guardar token y datos en SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', accessToken);
+        await prefs.setString('username', userData['username']);
+        await prefs.setString('email', userData['email']);
+        await prefs.setInt('id', userData['id']);
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 10),
-            Text('¡Bienvenido!'),
-          ],
-        ),
-        content: const Text('Has iniciado sesión exitosamente.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFF1DB584)),
-            child: const Text('Continuar'),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardScreen(userData: userData),
           ),
-        ],
-      ),
-    );
+        );
+      } else {
+        _showErrorDialog(responseData['detail'] ?? 'Error de autenticación');
+        print('Error de Login API: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      _showErrorDialog('Error de conexión: $e. Verifica tu conexión a internet o el servidor.');
+      print('Excepción en LoginScreen: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _checkSavedSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    final username = prefs.getString('username');
+    final email = prefs.getString('email');
+    final id = prefs.getInt('id');
+    if (token != null && username != null && email != null && id != null) {
+      final Map<String, dynamic> userData = {
+        'username': username,
+        'email': email,
+        'id': id,
+        'token': token,
+      };
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardScreen(userData: userData),
+          ),
+        );
+      });
+    }
   }
 
   void _showErrorDialog(String message) {
@@ -244,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         width: double.infinity,
         padding: const EdgeInsets.only(left: 24.0, top: 20.0, right: 24.0),
         child: const Text(
-          'Hello!',
+          'Bienvenido!',
           style: TextStyle(
             fontSize: 48,
             fontWeight: FontWeight.w300,
@@ -556,10 +562,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: const Color(0xFF2A2A2A), // Fondo oscuro
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: const Color(0xFFE5E7EB),
+          color: const Color(0xFF4A9B8E), // Borde verde
           width: 1,
         ),
       ),
@@ -571,7 +577,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         style: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: Color(0xFF374151),
+          color: Colors.white, // Texto claro
         ),
         decoration: InputDecoration(
           hintText: hintText,

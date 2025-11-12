@@ -71,7 +71,7 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
       print('Excepción al cargar parcelas: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al cargar las parcelas.'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('No se pudo cargar las parcelas. Verifica tu conexión o vuelve a intentar.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -92,7 +92,7 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
       print('Excepción al cargar planes: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al cargar los planes disponibles.'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('No se pudo cargar los planes. Intenta nuevamente.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -105,7 +105,7 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
     // Validación para asegurar que se envíe un plan
     if (parcelaData['plan_id'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Debes seleccionar un plan.'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('Selecciona un plan para continuar.'), backgroundColor: Colors.orange),
         );
         return;
     }
@@ -114,13 +114,13 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
       await ApiService.createParcela(userToken, parcelaData);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Parcela creada exitosamente.'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('La parcela se creó correctamente.'), backgroundColor: Colors.green),
       );
       await _loadParcelas(); // Recarga la lista de parcelas tras la creación
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al crear la parcela: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('No se pudo crear la parcela. Intenta nuevamente.'), backgroundColor: Colors.red),
       );
     }
   }
@@ -133,13 +133,13 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
       await ApiService.deleteParcela(userToken, id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Parcela eliminada exitosamente.'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('La parcela fue eliminada.'), backgroundColor: Colors.red),
       );
       await _loadParcelas(); // Recarga la lista tras eliminar
     } catch(e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al eliminar la parcela.'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('No se pudo eliminar la parcela. Intenta nuevamente.'), backgroundColor: Colors.red),
       );
     }
   }
@@ -237,15 +237,21 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
                       const SizedBox(height: 24),
                       DropdownButtonFormField<int>(
                         value: selectedPlanId,
-                        hint: const Text('Selecciona un plan', style: TextStyle(color: Colors.grey)),
+                        hint: const Text('Selecciona un plan', style: TextStyle(color: Colors.white70)),
                         isExpanded: true,
-                        decoration: _inputDecoration('Plan de Suscripción'),
-                        dropdownColor: const Color(0xFF333333),
+                        decoration: _inputDecoration('Plan de Suscripción').copyWith(
+                          filled: true,
+                          fillColor: Color(0xFF2A2A2A),
+                        ),
+                        dropdownColor: const Color(0xFF2A2A2A),
                         style: const TextStyle(color: Colors.white),
                         items: _plans.map<DropdownMenuItem<int>>((plan) {
                           return DropdownMenuItem<int>(
                             value: plan['id'],
-                            child: Text(plan['nombre'] ?? 'Plan sin nombre'),
+                            child: Text(
+                              plan['nombre'] ?? 'Plan sin nombre',
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -412,11 +418,11 @@ class _ParcelasScreenState extends State<ParcelasScreen> with TickerProviderStat
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.landscape_outlined, size: 64, color: Colors.grey[600]),
+            Icon(Icons.landscape_outlined, size: 64, color: Color(0xFF4A9B8E)),
             const SizedBox(height: 16),
-            Text('No tienes parcelas registradas', style: TextStyle(color: Colors.grey[400], fontSize: 18)),
+            Text('No hay parcelas registradas.', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('Toca el botón + para crear tu primera parcela', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+            Text('Presiona el botón "Añadir Parcela" para crear una.', style: TextStyle(color: Colors.white70, fontSize: 14)),
           ],
         ),
       );

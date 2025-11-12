@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:agronix/services/endpoints/endpoints.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -48,10 +49,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      const String apiUrl =  'http://10.0.2.2:8000/auth/register/';
-      
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(AuthEndpoints.register),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -442,34 +441,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       validator: validator,
       style: const TextStyle(fontSize: 16, color: Colors.black87),
       decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(
-          color: Colors.grey,
-          fontSize: 16,
-        ),
+        filled: true,
+        fillColor: const Color(0xFF2A2A2A), // Fondo oscuro
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: Color(0xFF4A9B8E)), // Borde verde
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: Color(0xFF4A9B8E)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF2E8B7B), width: 2),
+          borderSide: BorderSide(color: Color(0xFF4A9B8E), width: 2),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.red),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
-        ),
-        filled: true,
-        fillColor: const Color(0xFFE0F2F1),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        hintText: hintText,
+        hintStyle: TextStyle(color: Colors.grey[400]),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     );
   }

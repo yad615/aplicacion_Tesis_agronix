@@ -10,8 +10,9 @@ import 'package:agronix/screens/calendar_screen.dart';
 import 'package:agronix/screens/settings_screen.dart';
 import 'package:agronix/screens/profile_screen.dart';
 import 'package:agronix/screens/chatbot_screen.dart';
-import 'package:agronix/screens/parcelas_screen.dart' hide Expanded, Column, IconButton;
+import 'package:agronix/screens/parcelas_screen.dart';
 import 'package:agronix/widgets/dashboard_widgets.dart';
+import 'package:agronix/services/endpoints/endpoints.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -35,10 +36,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
   bool _isLoading = true;
   String _lastUpdateMessage = 'Cargando datos...';
-
-  // URLs actualizadas
-  final String _djangoBaseUrl = 'http://10.0.2.2:8000';
-  final String _cropDataEndpoint = '/api/crop-data/'; // ENDPOINT ESPECÍFICO
 
   @override
   void initState() {
@@ -90,7 +87,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
     try {
       final response = await http.get(
-        Uri.parse('$_djangoBaseUrl$_cropDataEndpoint'),
+        Uri.parse(ChatbotEndpoints.cropData),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $userToken',
@@ -114,15 +111,15 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             _updateAlertsBasedOnData();
           });
         } else {
-          print("Backend no devolvió datos válidos: $responseData");
+          debugPrint("Backend no devolvió datos válidos: $responseData");
           await _generateFreshSimulatedData();
         }
       } else {
-        print('Error HTTP: ${response.statusCode} - ${response.body}');
+        debugPrint('Error HTTP: ${response.statusCode} - ${response.body}');
         await _generateFreshSimulatedData();
       }
     } catch (e) {
-      print('Excepción: $e');
+      debugPrint('Excepción: $e');
       if (mounted) {
         await _generateFreshSimulatedData();
       }
@@ -147,7 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         'pest_risk': ['Bajo', 'Moderado', 'Alto'][Random().nextInt(3)],
         'last_updated': DateTime.now(),
       };
-      _lastUpdateMessage = 'Datos simulados: ${DateFormat('dd/MM/yyyy HH:mm').format(_cropData!['last_updated'])}';
+      _lastUpdateMessage = 'Última actualización: ${DateFormat('dd/MM/yyyy HH:mm').format(_cropData!['last_updated'])}';
       _updateAlertsBasedOnData();
     });
   }
@@ -296,7 +293,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           ],
         ),
       ),
-      floatingActionButton: _buildChatButton(),
+      floatingActionButton: _buildFloatingButtons(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavigation(),
     );
   }
@@ -322,7 +320,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.eco, color: Colors.white, size: 24),
@@ -344,7 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 Text(
                   DateFormat('dd MMMM HH:mm').format(DateTime.now()),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 14,
                   ),
                 ),
@@ -634,14 +632,23 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             TextField(
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Descripción de la acción',
-                hintStyle: TextStyle(color: Colors.grey[400]),
+                filled: true,
+                fillColor: Color(0xFF2A2A2A), // Fondo oscuro
                 border: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey[400]!),
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Color(0xFF4A9B8E)), // Borde verde
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey[400]!),
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Color(0xFF4A9B8E)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Color(0xFF4A9B8E), width: 2),
+                ),
+                hintText: 'Escribe aquí...',
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
             const SizedBox(height: 16),
@@ -746,18 +753,422 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildChatButton() {
-    return FloatingActionButton(
-      onPressed: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => ChatBotScreen(userData: widget.userData),
-        );
-      },
-      backgroundColor: const Color(0xFF4A9B8E),
-      child: const Icon(Icons.chat, color: Colors.white),
+  Widget _buildFloatingButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Botón para crear tarea
+        FloatingActionButton(
+          heroTag: 'create_task',
+          onPressed: () => _showCreateTaskDialog(),
+          backgroundColor: Colors.orange,
+          child: const Icon(Icons.add_task, color: Colors.white),
+        ),
+        const SizedBox(height: 12),
+        // Botón del chatbot
+        FloatingActionButton(
+          heroTag: 'chat',
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => ChatBotScreen(userData: widget.userData),
+            );
+          },
+          backgroundColor: const Color(0xFF4A9B8E),
+          child: const Icon(Icons.chat, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  void _showCreateTaskDialog() {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    String selectedType = 'riego';
+    String selectedPriority = 'media';
+    DateTime selectedDateTime = DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF23272A),
+          title: const Row(
+            children: [
+              Icon(Icons.add_task, color: Color(0xFF4A9B8E)),
+              SizedBox(width: 8),
+              Text(
+                'Crear Nueva Tarea',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Título
+                TextField(
+                  controller: titleController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Color(0xFF23272A),
+                    labelText: 'Título de la tarea',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    hintText: 'Ej: Riego de parcela A',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Descripción
+                TextField(
+                  controller: descriptionController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Color(0xFF23272A),
+                    labelText: 'Descripción (opcional)',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    hintText: 'Describe los detalles de la tarea...',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Tipo de tarea
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  dropdownColor: const Color(0xFF23272A),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Color(0xFF23272A),
+                    labelText: 'Tipo de tarea',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'riego',
+                      child: Row(
+                        children: [
+                          Icon(Icons.water_drop, color: Colors.blue, size: 20),
+                          SizedBox(width: 8),
+                          Text('Riego'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fertilizacion',
+                      child: Row(
+                        children: [
+                          Icon(Icons.eco, color: Colors.green, size: 20),
+                          SizedBox(width: 8),
+                          Text('Fertilización'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'poda',
+                      child: Row(
+                        children: [
+                          Icon(Icons.content_cut, color: Colors.brown, size: 20),
+                          SizedBox(width: 8),
+                          Text('Poda'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'cosecha',
+                      child: Row(
+                        children: [
+                          Icon(Icons.agriculture, color: Colors.orange, size: 20),
+                          SizedBox(width: 8),
+                          Text('Cosecha'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'control_plagas',
+                      child: Row(
+                        children: [
+                          Icon(Icons.bug_report, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Text('Control de Plagas'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'analisis_suelo',
+                      child: Row(
+                        children: [
+                          Icon(Icons.science, color: Colors.purple, size: 20),
+                          SizedBox(width: 8),
+                          Text('Análisis de Suelo'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedType = value!;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                
+                // Prioridad
+                DropdownButtonFormField<String>(
+                  value: selectedPriority,
+                  dropdownColor: const Color(0xFF23272A),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Color(0xFF23272A),
+                    labelText: 'Prioridad',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'alta',
+                      child: Row(
+                        children: [
+                          Icon(Icons.priority_high, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Text('Alta'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'media',
+                      child: Row(
+                        children: [
+                          Icon(Icons.remove, color: Colors.orange, size: 20),
+                          SizedBox(width: 8),
+                          Text('Media'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'baja',
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_downward, color: Colors.green, size: 20),
+                          SizedBox(width: 8),
+                          Text('Baja'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedPriority = value!;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                
+                // Fecha
+                InkWell(
+                  onTap: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDateTime,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: const ColorScheme.dark(
+                              primary: Color(0xFF4A9B8E),
+                              onPrimary: Colors.white,
+                              surface: Color(0xFF2A2A2A),
+                              onSurface: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (pickedDate != null) {
+                      setDialogState(() {
+                        selectedDateTime = pickedDate;
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[400]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Fecha: ${DateFormat('dd/MM/yyyy').format(selectedDateTime)}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const Icon(Icons.calendar_today, color: Color(0xFF4A9B8E)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Hora
+                InkWell(
+                  onTap: () async {
+                    final pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: selectedTime,
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: const ColorScheme.dark(
+                              primary: Color(0xFF4A9B8E),
+                              onPrimary: Colors.white,
+                              surface: Color(0xFF2A2A2A),
+                              onSurface: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (pickedTime != null) {
+                      setDialogState(() {
+                        selectedTime = pickedTime;
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[400]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Hora: ${selectedTime.format(context)}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const Icon(Icons.access_time, color: Color(0xFF4A9B8E)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (titleController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor ingresa un título para la tarea'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                
+                // Aquí se enviaría la tarea al backend
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('Tarea "${titleController.text}" creada exitosamente'),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF4A9B8E),
+                    duration: const Duration(seconds: 3),
+                    action: SnackBarAction(
+                      label: 'Ver',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        setState(() {
+                          _selectedIndex = 4; // Ir a calendario
+                        });
+                      },
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4A9B8E),
+              ),
+              child: const Text('Crear Tarea'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -766,7 +1177,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       decoration: BoxDecoration(
         color: const Color(0xFF2A2A2A),
         border: Border(
-          top: BorderSide(color: Colors.grey.withOpacity(0.1)),
+          top: BorderSide(color: Colors.grey.withValues(alpha: 0.1)),
         ),
       ),
       child: BottomNavigationBar(

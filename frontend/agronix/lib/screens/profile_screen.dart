@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:agronix/services/api_service.dart'; // Importa tu servicio de API
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -18,6 +21,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController emailController;
   late TextEditingController nombresController;
   late TextEditingController apellidosController;
+  File? _profileImage;
+  final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true; // Para el indicador de carga inicial
   
@@ -33,25 +38,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Llamamos a la función para cargar los datos desde la API
     _loadProfileData();
   }
+    Future<void> _pickProfileImage() async {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+        // Opcional: subir la imagen al backend aquí
+        await _uploadProfileImage(_profileImage!);
+      }
+    }
+
+    Future<void> _uploadProfileImage(File imageFile) async {
+      final token = widget.userData['token'] as String?;
+      final userId = widget.userData['id'].toString();
+      if (token == null || userId.isEmpty) return;
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://192.168.0.233:8000/users/profile/upload_image/$userId/'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('profile_image', imageFile.path));
+      try {
+        var response = await request.send();
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Imagen de perfil actualizada'), backgroundColor: Colors.green),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al subir imagen (${response.statusCode})'), backgroundColor: Colors.red),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al subir imagen: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
 
   // Función para CARGAR los datos desde la API
   Future<void> _loadProfileData() async {
     setState(() { _isLoading = true; });
 
     final token = widget.userData['token'] as String?;
-    if (token == null) return;
-
     try {
-      final data = await ApiService.fetchUserProfile(token);
-      final profile = data['profile'];
-
-      // Rellenamos los controladores con los datos frescos de la API
-      setState(() {
-        usernameController.text = data['username'] ?? '';
-        emailController.text = data['email'] ?? '';
-        nombresController.text = profile['nombres'] ?? '';
-        apellidosController.text = profile['apellidos'] ?? '';
-      });
+      final response = await http.get(
+        Uri.parse('https://agro-ai-plataform-1.onrender.com/api/user/profile/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $token',
+        },
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        setState(() {
+          usernameController.text = data['username'] ?? '';
+          emailController.text = data['email'] ?? '';
+          nombresController.text = data['nombres'] ?? '';
+          apellidosController.text = data['apellidos'] ?? '';
+        });
+        // Si el backend provee una url de imagen, podrías guardarla en una variable para mostrarla con Image.network
+        // Ejemplo:
+        // _profileImageUrl = data['profile_image_url'];
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar perfil: ${data['detail'] ?? response.body}'), backgroundColor: Colors.red),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al cargar perfil: $e'), backgroundColor: Colors.red),
@@ -64,23 +119,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Función para GUARDAR los datos en la API
   Future<void> _saveProfile() async {
     final token = widget.userData['token'] as String?;
-    if (token == null) return;
+    final userId = widget.userData['id'].toString();
+    if (token == null || userId.isEmpty) return;
 
-    // Creamos el mapa de datos que espera tu API
     final Map<String, dynamic> updatedData = {
       'nombres': nombresController.text,
       'apellidos': apellidosController.text,
+      // Agrega aquí los demás campos si tienes los controladores
     };
 
     try {
-      // Llamamos al servicio para actualizar el perfil
-      await ApiService.updateUserProfile(token, updatedData);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perfil actualizado exitosamente'),
-          backgroundColor: Colors.green,
-        ),
+      final response = await http.post(
+        Uri.parse('http://192.168.0.233:8000/users/profile/update/$userId/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(updatedData),
       );
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Perfil actualizado exitosamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        final data = json.decode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar el perfil: ${data['detail'] ?? response.body}'), backgroundColor: Colors.red),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al guardar el perfil: $e'), backgroundColor: Colors.red),
@@ -144,28 +213,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Stack(
           children: [
-            CircleAvatar(
-              radius: 60,
-              backgroundColor: const Color(0xFF4A9B8E),
-              child: Text(
-                usernameController.text.isNotEmpty ? usernameController.text.substring(0, 1).toUpperCase() : 'U',
-                style: const TextStyle(fontSize: 50, color: Colors.white),
-              ),
-            ),
+            _profileImage != null
+                ? CircleAvatar(
+                    radius: 60,
+                    backgroundImage: FileImage(_profileImage!),
+                  )
+                : CircleAvatar(
+                    radius: 60,
+                    backgroundColor: const Color(0xFF4A9B8E),
+                    child: Text(
+                      usernameController.text.isNotEmpty ? usernameController.text.substring(0, 1).toUpperCase() : 'U',
+                      style: const TextStyle(fontSize: 50, color: Colors.white),
+                    ),
+                  ),
             if (isEditing)
               Positioned(
                 bottom: 0,
                 right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4A9B8E),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Colors.white,
-                    size: 20,
+                child: GestureDetector(
+                  onTap: _pickProfileImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4A9B8E),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -258,10 +335,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: Colors.white,
                     fontSize: 16,
                   ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Color(0xFF2A2A2A), // Fondo oscuro
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)), // Borde verde
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Color(0xFF4A9B8E), width: 2),
+                    ),
+                    hintText: label,
+                    hintStyle: TextStyle(color: Colors.grey[400]),
                     isDense: true,
-                    contentPadding: EdgeInsets.zero,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
               ],

@@ -5,6 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:agronix/models/chat_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:agronix/models/calendar_event.dart';
 
 class ChatBotScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -26,9 +32,20 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
   List<String> _tasksCreated = [];
   late AnimationController _typingAnimationController;
   late Animation<double> _typingAnimation;
-
-  final String _djangoBaseUrl = 'http://10.0.2.2:8000';
-  final String _chatbotEndpoint = '/chatbot/';
+  SpeechToText _speechToText = SpeechToText();
+  bool _isListening = false;
+  final FlutterTts _flutterTts = FlutterTts();
+  File? _userImage;
+  final ImagePicker _picker = ImagePicker();
+  Future<void> _pickUserImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _userImage = File(pickedFile.path);
+      });
+      // Aquí podrías subir la imagen al backend si lo deseas
+    }
+  }
 
   @override
   void initState() {
@@ -102,7 +119,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
         }
       }
     } catch (e) {
-      print('Error loading chat history: $e');
+      debugPrint('Error loading chat history: $e');
     }
   }
 
@@ -112,7 +129,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       final String historyJson = json.encode(_messages.map((msg) => msg.toJson()).toList());
       await prefs.setString('chat_history', historyJson);
     } catch (e) {
-      print('Error saving chat history: $e');
+      debugPrint('Error saving chat history: $e');
     }
   }
 
@@ -127,7 +144,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       
       _addInitialMessage();
     } catch (e) {
-      print('Error clearing chat history: $e');
+      debugPrint('Error clearing chat history: $e');
     }
   }
 
@@ -154,7 +171,21 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       
       _saveChatHistory();
       _scrollToBottom();
+      if (!isUser) {
+        _speak(message);
+      }
     }
+  }
+
+  Future<void> _speak(String text) async {
+    await _flutterTts.setLanguage('es-ES');
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.setSpeechRate(0.7); // Más lento
+    // Filtra emojis y asteriscos antes de leer
+    final cleanText = text
+      .replaceAll(RegExp(r'[\*]+'), '')
+      .replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}\u{2700}-\u{27BF}]', unicode: true), '');
+    await _flutterTts.speak(cleanText);
   }
 
   void _scrollToBottom() {
@@ -169,7 +200,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
             curve: Curves.easeOut,
           );
         } catch (e) {
-          print('Error scrolling: $e');
+          debugPrint('Error scrolling: $e');
         }
       }
     });
@@ -182,22 +213,35 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
   }
 
   Future<void> _sendMessage() async {
+    // Helper: add created tasks to calendar
+    void _addTasksToCalendar(List<String> tasks) {
+      for (final task in tasks) {
+        final event = CalendarEvent(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          title: task,
+          description: 'Tarea creada desde el chatbot',
+          dateTime: DateTime.now(),
+          type: EventType.irrigation, // Puedes mejorar el tipo si tienes info
+          priority: Priority.medium,
+        );
+        CalendarEventBus().emit(event);
+      }
+    }
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    _addMessage(text, true);
-    _messageController.clear();
-
-    _safeSetState(() {
-      _isTyping = true;
-    });
-    _typingAnimationController.repeat();
-
-    final String? userToken = widget.userData?['token'] as String?;
-    final int? userId = widget.userData?['id'] as int?;
-    
-    if (userToken == null || userToken.isEmpty) {
-      _addMessage('❌ Error de autenticación. Por favor, inicia sesión nuevamente.', false);
+    // Si el usuario pide datos del dashboard, responde con resumen leído
+    if (text.toLowerCase().contains('dashboard') || text.toLowerCase().contains('estadística')) {
+      final dashboardStats = [
+        'Producción Total: 2,450 kilogramos',
+        'Eficiencia de Riego: 87 por ciento',
+        'Tiempo de Crecimiento: 45 días',
+        'Calidad del Producto: 9.2 de 10',
+        'Progreso Semanal: Lun 20, Mar 35, Mié 40, Jue 30, Vie 50, Sáb 45, Dom 38',
+      ];
+      final username = widget.userData?['username'] ?? '';
+      final summary = 'Hola $username, aquí tienes el resumen de tu dashboard: ' + dashboardStats.join('. ');
+      _addMessage(summary, false);
       _safeSetState(() {
         _isTyping = false;
       });
@@ -205,15 +249,27 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       return;
     }
 
+    // Obtiene el nombre de usuario para mostrar en el chat
+    final username = widget.userData?['username'] ?? '';
+    _addMessage('$username: $text', true);
+    _messageController.clear();
+
+    _safeSetState(() {
+      _isTyping = true;
+    });
+    _typingAnimationController.repeat();
+
+    // No se envía token, solo el header estándar
+    Map<String, String> headers = {
+      'Content-Type': 'application/json',
+    };
     try {
       final response = await http.post(
-        Uri.parse('$_djangoBaseUrl$_chatbotEndpoint'),
-         headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Token $userToken', // <-- CORRECTO
-  },
+        Uri.parse('http://192.168.0.233:8000/api/chatbot/'),
+        headers: headers,
         body: json.encode({
           'message': text,
+          'username': username,
         }),
       );
 
@@ -221,19 +277,22 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
         if (response.statusCode == 200) {
           final Map<String, dynamic> responseData = json.decode(response.body);
           final String botResponse = responseData['response'] as String? ?? 'Respuesta vacía';
-          
+
           if (responseData.containsKey('crop_data')) {
             _currentCropData = responseData['crop_data'];
           }
-          
+
           if (responseData.containsKey('tasks_created')) {
             _tasksCreated = List<String>.from(responseData['tasks_created'] ?? []);
           }
-          
+
+          // Simula un retraso más largo para la respuesta del bot
+          await Future.delayed(const Duration(milliseconds: 1800));
           _addMessage(botResponse, false);
-          
+
           if (_tasksCreated.isNotEmpty) {
             _showTasksCreatedNotification();
+            _addTasksToCalendar(_tasksCreated);
           }
         } else {
           _handleApiError(response);
@@ -241,8 +300,8 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       }
     } catch (e) {
       if (!_isDisposed && mounted) {
-        _addMessage('🔌 Error de conexión. Revisa tu internet e intenta nuevamente.', false);
-        print('Network Error: $e');
+        _addMessage('🔌 Error de conexión o el servidor no responde. Revisa tu internet, la IP y el backend.\nDetalles: $e', false);
+        debugPrint('Network Error: $e');
       }
     } finally {
       _safeSetState(() {
@@ -257,9 +316,19 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
     try {
       final errorBody = json.decode(response.body);
       if (errorBody is Map<String, dynamic>) {
-        errorMessage = errorBody['error'] ?? errorBody['detail'] ?? errorMessage;
+        if (errorBody['error'] != null && errorBody['error'].toString().isNotEmpty) {
+          errorMessage = '❌ ${errorBody['error']}';
+        } else if (errorBody['detail'] != null && errorBody['detail'].toString().isNotEmpty) {
+          errorMessage = '❌ ${errorBody['detail']}';
+        } else {
+          errorMessage = '❌ ${response.body}';
+        }
+      } else {
+        errorMessage = '❌ ${response.body}';
       }
-    } catch (_) {}
+    } catch (_) {
+      errorMessage = '❌ ${response.body}';
+    }
     _addMessage(errorMessage, false);
   }
 
@@ -316,7 +385,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
                     ),
                   ],
                 ),
-              )).toList(),
+              )),
             ],
           ),
         ),
@@ -504,14 +573,38 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+            Stack(
+              children: [
+                _userImage != null
+                    ? CircleAvatar(
+                        radius: 24,
+                        backgroundImage: FileImage(_userImage!),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.account_circle, color: Colors.white, size: 32),
+                      ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _pickUserImage,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4A9B8E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            child: const Icon(Icons.smart_toy, color: Colors.white, size: 24),
-          ),
           const SizedBox(width: 16),
           const Expanded(
             child: Column(
@@ -538,7 +631,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           if (_currentCropData != null)
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: IconButton(
@@ -551,7 +644,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           if (_tasksCreated.isNotEmpty)
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: IconButton(
@@ -590,7 +683,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           const SizedBox(width: 8),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: IconButton(
@@ -670,7 +763,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -733,7 +826,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -768,7 +861,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
             Text(
               DateFormat('HH:mm').format(message.timestamp),
               style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 10,
               ),
             ),
@@ -776,6 +869,53 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
         ),
       ),
     );
+  }
+
+  Future<void> _startListening() async {
+    var status = await Permission.microphone.request();
+    if (status.isGranted) {
+      bool available = await _speechToText.initialize();
+      if (available) {
+        setState(() => _isListening = true);
+        _speechToText.listen(
+          onResult: (result) {
+            if (result.finalResult) {
+              setState(() {
+                _messageController.text = result.recognizedWords;
+                _isListening = false;
+              });
+            }
+          },
+          localeId: 'es_ES',
+        );
+      }
+    } else if (status.isPermanentlyDenied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Permiso de micrófono denegado permanentemente. Ábrelo en ajustes.'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Ajustes',
+            textColor: Colors.white,
+            onPressed: () {
+              openAppSettings();
+            },
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permiso de micrófono denegado. Actívalo en ajustes.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _stopListening() {
+    _speechToText.stop();
+    setState(() => _isListening = false);
   }
 
   Widget _buildInputArea() {
@@ -802,10 +942,23 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
                 controller: _messageController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Color(0xFF2A2A2A), // Fondo oscuro
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide(color: Color(0xFF4A9B8E)), // Borde verde
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide(color: Color(0xFF4A9B8E)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide(color: Color(0xFF4A9B8E), width: 2),
+                  ),
                   hintText: 'Pregunta sobre tus fresas...',
                   hintStyle: TextStyle(color: Colors.grey[500]),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 ),
                 onSubmitted: (_) => _sendMessage(),
                 maxLines: null,
@@ -825,6 +978,26 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
               ),
               child: const Icon(
                 Icons.send,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _isListening ? _stopListening : _startListening,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _isListening
+                      ? [Colors.red, Colors.orange]
+                      : [Color(0xFF4A9B8E), Color(0xFF2D7A6B)],
+                ),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: Icon(
+                _isListening ? Icons.mic_off : Icons.mic,
                 color: Colors.white,
                 size: 20,
               ),

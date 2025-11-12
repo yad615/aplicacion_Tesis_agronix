@@ -1,4 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
+
+class WeeklyProgress {
+  final String day;
+  final double value;
+  WeeklyProgress({required this.day, required this.value});
+}
+
+// ...existing code...
 
 class StatisticsScreen extends StatelessWidget {
   final Map<String, dynamic> userData;
@@ -82,6 +91,17 @@ class StatisticsScreen extends StatelessWidget {
   }
 
   Widget _buildChart() {
+    // Ejemplo de datos semanales
+    final data = [
+      WeeklyProgress(day: 'Lun', value: 20),
+      WeeklyProgress(day: 'Mar', value: 35),
+      WeeklyProgress(day: 'Mié', value: 40),
+      WeeklyProgress(day: 'Jue', value: 30),
+      WeeklyProgress(day: 'Vie', value: 50),
+      WeeklyProgress(day: 'Sáb', value: 45),
+      WeeklyProgress(day: 'Dom', value: 38),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -100,17 +120,32 @@ class StatisticsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Container(
+          SizedBox(
             height: 200,
-            child: const Center(
-              child: Text(
-                'Gráfico de Progreso\n(Integración con charts_flutter)',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 16,
-                ),
-                textAlign: TextAlign.center,
+            child: SfCartesianChart(
+              backgroundColor: const Color(0xFF2A2A2A),
+              primaryXAxis: CategoryAxis(
+                labelStyle: const TextStyle(color: Colors.white),
+                axisLine: const AxisLine(color: Colors.white),
+                majorTickLines: const MajorTickLines(size: 0),
+                majorGridLines: const MajorGridLines(width: 0),
               ),
+              primaryYAxis: NumericAxis(
+                labelStyle: const TextStyle(color: Colors.white),
+                axisLine: const AxisLine(color: Colors.white),
+                majorTickLines: const MajorTickLines(size: 0),
+                majorGridLines: const MajorGridLines(width: 0),
+              ),
+              series: <BarSeries<WeeklyProgress, String>>[
+                BarSeries<WeeklyProgress, String>(
+                  dataSource: data,
+                  xValueMapper: (WeeklyProgress progress, _) => progress.day,
+                  yValueMapper: (WeeklyProgress progress, _) => progress.value,
+                  color: const Color(0xFF4A9B8E),
+                  borderRadius: BorderRadius.circular(6),
+                  width: 0.6,
+                ),
+              ],
             ),
           ),
         ],

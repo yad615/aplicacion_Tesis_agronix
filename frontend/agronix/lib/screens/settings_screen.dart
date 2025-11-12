@@ -337,12 +337,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Email: soporte@agronexus.com',
+              'Email: soporte@agronix.com',
               style: TextStyle(color: Colors.grey),
             ),
             const Text(
-              'Teléfono: +1 234 567 890',
-              style: TextStyle(color: Colors.grey),
+              'Teléfono: +51 923190931',
             ),
             const SizedBox(height: 16),
             const Text(

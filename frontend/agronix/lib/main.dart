@@ -1,18 +1,44 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart'; 
-import 'screens/dashboard_screen.dart';
-import 'screens/splash_screen.dart';
-import 'screens/alerts_screen.dart';
-import 'screens/calendar_screen.dart';
-import 'screens/chatbot_screen.dart';  
-import 'screens/settings_screen.dart';
-import 'screens/statistics_screen.dart';
-import 'screens/profile_screen.dart'; 
+import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 
-import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
-void main() {
+// Core
+import 'core/theme/app_theme.dart';
+import 'core/routes/app_routes.dart';
+import 'data/data_sources/local/local_storage.dart';
+
+// Repositories
+import 'data/repositories/auth_repository_impl.dart';
+import 'data/repositories/parcela_repository.dart';
+import 'data/repositories/task_repository.dart';
+import 'data/repositories/alert_repository.dart';
+
+// ViewModels
+import 'presentation/view_models/auth_view_model.dart';
+import 'presentation/view_models/dashboard_view_model.dart';
+import 'presentation/view_models/parcelas_view_model.dart';
+import 'presentation/view_models/calendar_view_model.dart';
+import 'presentation/view_models/alerts_view_model.dart';
+
+// Views (MVVM)
+import 'presentation/views/auth/login_view.dart';
+
+// Screens (temporal hasta migrar a views)
+import 'screens/splash_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/profile_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializar LocalStorage
+  await LocalStorage().init();
+  
+  if (kDebugMode) {
+    debugPrint('AgroNix App iniciando con arquitectura MVVM...');
+  }
+  
   runApp(const AgroNixApp());
 }
 
@@ -21,63 +47,48 @@ class AgroNixApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AgroNix',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: MaterialColor(
-          0xFF4A9B8E,
-          const <int, Color>{
-            50: Color(0xFFE8F5F3),
-            100: Color(0xFFC6E6E0),
-            200: Color(0xFFA0D5CB),
-            300: Color(0xFF7AC4B6),
-            400: Color(0xFF5DB7A6),
-            500: Color(0xFF4A9B8E),
-            600: Color(0xFF429386),
-            700: Color(0xFF39897B),
-            800: Color(0xFF317F71),
-            900: Color(0xFF216D5F),
-          },
+    return MultiProvider(
+      providers: [
+        // Auth ViewModel
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(AuthRepositoryImpl()),
         ),
-        fontFamily: 'Roboto',
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4A9B8E),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1B4D3E),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4A9B8E),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+        // Dashboard ViewModel
+        ChangeNotifierProvider(
+          create: (_) => DashboardViewModel(
+            ParcelaRepositoryImpl(),
+            TaskRepositoryImpl(),
+            AlertRepositoryImpl(),
           ),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF4A9B8E), width: 2),
-          ),
+        // Parcelas ViewModel
+        ChangeNotifierProvider(
+          create: (_) => ParcelasViewModel(ParcelaRepositoryImpl()),
         ),
+        // Calendar ViewModel
+        ChangeNotifierProvider(
+          create: (_) => CalendarViewModel(TaskRepositoryImpl()),
+        ),
+        // Alerts ViewModel
+        ChangeNotifierProvider(
+          create: (_) => AlertsViewModel(AlertRepositoryImpl()),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'AgroNix',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.light,
+        initialRoute: AppRoutes.splash,
+        routes: {
+          AppRoutes.splash: (context) => const SplashScreen(),
+          AppRoutes.login: (context) => const LoginView(),
+          AppRoutes.register: (context) => const RegisterScreen(),
+          AppRoutes.dashboard: (context) => const DashboardScreen(userData: {}),
+          AppRoutes.profile: (context) => const ProfileScreen(userData: {}),
+        },
       ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
-        '/dashboard': (context) => const DashboardScreen(userData: {}),
-        '/profile': (context) => const ProfileScreen(userData: {}),
-      },
     );
   }
 }

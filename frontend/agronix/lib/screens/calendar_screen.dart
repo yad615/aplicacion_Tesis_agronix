@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:agronix/services/endpoints/endpoints.dart';
+import 'package:agronix/models/calendar_event.dart';
 
 class CalendarScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -15,15 +16,29 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    CalendarEventBus().addListener(_onExternalEvent);
+  }
+
+  @override
+  void dispose() {
+    CalendarEventBus().removeListener(_onExternalEvent);
+    super.dispose();
+  }
+
+  void _onExternalEvent(CalendarEvent event) {
+    setState(() {
+      events.add(event);
+    });
+  }
   DateTime selectedDate = DateTime.now();
   DateTime focusedDate = DateTime.now();
   List<CalendarEvent> events = [];
   bool _isLoading = false;
   bool _localeInitialized = false;
   
-  final String _djangoBaseUrl = 'http://10.0.2.2:8000';
-  final String _tasksEndpoint = '/api/tasks/';
-
   @override
   void initState() {
     super.initState();
@@ -59,7 +74,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       final response = await http.get(
-        Uri.parse('$_djangoBaseUrl$_tasksEndpoint'),
+        Uri.parse(TaskEndpoints.list),
         headers: {
           'Authorization': 'Bearer $userToken',
         },
@@ -578,8 +593,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return Colors.purple;
       case EventType.pruning:
         return Colors.brown;
-      default:
-        return Colors.grey;
     }
   }
 
@@ -597,8 +610,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return Icons.science;
       case EventType.pruning:
         return Icons.content_cut;
-      default:
-        return Icons.event;
     }
   }
 
@@ -625,87 +636,4 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-class CalendarEvent {
-  final String id;
-  final String title;
-  final String description;
-  final DateTime dateTime;
-  final EventType type;
-  final Priority priority;
 
-  CalendarEvent({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.dateTime,
-    required this.type,
-    required this.priority,
-  });
-
-  factory CalendarEvent.fromJson(Map<String, dynamic> json) {
-    return CalendarEvent(
-      id: json['id'].toString(),
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      dateTime: DateTime.parse(json['scheduled_date'] ?? json['date_time']),
-      type: _parseEventType(json['task_type'] ?? json['type']),
-      priority: _parsePriority(json['priority']),
-    );
-  }
-
-  static EventType _parseEventType(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'irrigation':
-      case 'riego':
-        return EventType.irrigation;
-      case 'fertilization':
-      case 'fertilización':
-        return EventType.fertilization;
-      case 'pest_control':
-      case 'control_plagas':
-        return EventType.pestControl;
-      case 'harvest':
-      case 'cosecha':
-        return EventType.harvest;
-      case 'soil_analysis':
-      case 'análisis_suelo':
-        return EventType.soilAnalysis;
-      case 'pruning':
-      case 'poda':
-        return EventType.pruning;
-      default:
-        return EventType.irrigation;
-    }
-  }
-
-  static Priority _parsePriority(String? priority) {
-    switch (priority?.toLowerCase()) {
-      case 'high':
-      case 'alta':
-        return Priority.high;
-      case 'medium':
-      case 'media':
-        return Priority.medium;
-      case 'low':
-      case 'baja':
-        return Priority.low;
-      default:
-        return Priority.medium;
-    }
-  }
-}
-
-enum EventType {
-  irrigation,
-  fertilization,
-  pestControl,
-  harvest,
-  soilAnalysis,
-  pruning,
-}
-
-enum Priority {
-  high,
-  medium,
-  low,
-}
