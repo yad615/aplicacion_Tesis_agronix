@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'login_screen.dart';
+import 'auth_login_screen.dart';
+import 'dashboard_screen.dart';
+import 'package:agronix/services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -74,14 +76,72 @@ class _SplashScreenState extends State<SplashScreen>
     _slideController.forward();
 
     await Future.delayed(const Duration(milliseconds: 2500));
+    await _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    // Solo forzar login si no hay token
+    final hasSession = await AuthService.hasActiveSession();
+    if (!mounted) return;
+    if (hasSession) {
+      try {
+        // Intentar validar token, pero no forzar logout si falla
+        await AuthService.verifyTokenAndRole(forceLogout: false);
+        if (!mounted) return;
+        final userData = await AuthService.getUserData();
+        final token = await AuthService.getToken();
+        if (userData != null && token != null) {
+          final userMap = userData.toJson();
+          userMap['token'] = token;
+          _navigateToDashboard(userMap);
+          return;
+        }
+      } catch (e) {
+        // Si hay error, mostrar dashboard igual y mostrar error en pantalla
+        final userData = await AuthService.getUserData();
+        final token = await AuthService.getToken();
+        if (userData != null && token != null) {
+          final userMap = userData.toJson();
+          userMap['token'] = token;
+          _navigateToDashboard(userMap);
+          // Puedes mostrar un snackbar global aquí si quieres
+          return;
+        }
+      }
+    }
+    // Si no hay token, ir al login
     _navigateToLogin();
+  }
+
+  void _navigateToDashboard(Map<String, dynamic> userData) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            DashboardScreen(userData: userData),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOutCubic;
+
+          var tween = Tween(begin: begin, end: end).chain(
+            CurveTween(curve: curve),
+          );
+
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const LoginScreen(),
+            const AuthLoginScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;

@@ -3,6 +3,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:agronix/services/endpoints/user_endpoints.dart';
+import 'package:agronix/services/auth_service.dart';
+import 'package:agronix/screens/auth_login_screen.dart';
+import 'package:agronix/config/api_config.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -25,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true; // Para el indicador de carga inicial
+  String? _profileImageUrl;
   
   @override
   void initState() {
@@ -51,18 +56,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     Future<void> _uploadProfileImage(File imageFile) async {
       final token = widget.userData['token'] as String?;
-      final userId = widget.userData['id'].toString();
-      if (token == null || userId.isEmpty) return;
+      if (token == null) return;
 
       var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://192.168.0.233:8000/users/profile/upload_image/$userId/'),
+        'PATCH',
+        Uri.parse('${ApiConfig.baseUrl}api/user/profile/'),
       );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('profile_image', imageFile.path));
+      request.headers['Authorization'] = 'Token $token';
+      request.files.add(await http.MultipartFile.fromPath('imagen', imageFile.path));
       try {
         var response = await request.send();
         if (response.statusCode == 200) {
+          final respStr = await response.stream.bytesToString();
+          final respJson = json.decode(respStr);
+          setState(() {
+            _profileImageUrl = respJson['imagen_url'] ?? _profileImageUrl;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Imagen de perfil actualizada'), backgroundColor: Colors.green),
           );
@@ -85,26 +94,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final token = widget.userData['token'] as String?;
     try {
       final response = await http.get(
-        Uri.parse('https://agro-ai-plataform-1.onrender.com/api/user/profile/'),
+        Uri.parse('${ApiConfig.baseUrl}api/user/profile/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Token $token',
         },
       );
-      final data = json.decode(response.body);
       if (response.statusCode == 200) {
-        setState(() {
-          usernameController.text = data['username'] ?? '';
-          emailController.text = data['email'] ?? '';
-          nombresController.text = data['nombres'] ?? '';
-          apellidosController.text = data['apellidos'] ?? '';
-        });
-        // Si el backend provee una url de imagen, podrías guardarla en una variable para mostrarla con Image.network
-        // Ejemplo:
-        // _profileImageUrl = data['profile_image_url'];
+        try {
+          final data = json.decode(response.body);
+          setState(() {
+            usernameController.text = data['username'] ?? '';
+            emailController.text = data['email'] ?? '';
+            nombresController.text = data['nombres'] ?? '';
+            apellidosController.text = data['apellidos'] ?? '';
+            _profileImageUrl = data['imagen_url'] ?? null;
+          });
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al cargar perfil: Respuesta no válida (no es JSON)'), backgroundColor: Colors.red),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar perfil: ${data['detail'] ?? response.body}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error al cargar perfil: ${response.body}'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -119,8 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Función para GUARDAR los datos en la API
   Future<void> _saveProfile() async {
     final token = widget.userData['token'] as String?;
-    final userId = widget.userData['id'].toString();
-    if (token == null || userId.isEmpty) return;
+    if (token == null) return;
 
     final Map<String, dynamic> updatedData = {
       'nombres': nombresController.text,
@@ -129,25 +141,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     };
 
     try {
-      final response = await http.post(
-        Uri.parse('http://192.168.0.233:8000/users/profile/update/$userId/'),
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}api/user/profile/'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
+          'Authorization': 'Token $token',
         },
         body: json.encode(updatedData),
       );
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Perfil actualizado exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        try {
+          final data = json.decode(response.body);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Perfil actualizado exitosamente'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al guardar el perfil: Respuesta no válida (no es JSON)'), backgroundColor: Colors.red),
+          );
+        }
       } else {
-        final data = json.decode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar el perfil: ${data['detail'] ?? response.body}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error al guardar el perfil: ${response.body}'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -202,6 +220,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildProfileForm(),
                   const SizedBox(height: 30),
                   _buildProfileStats(),
+                  const SizedBox(height: 30),
+                  _buildLogoutButton(),
                 ],
               ),
             ),
@@ -213,19 +233,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Stack(
           children: [
-            _profileImage != null
-                ? CircleAvatar(
-                    radius: 60,
-                    backgroundImage: FileImage(_profileImage!),
-                  )
-                : CircleAvatar(
-                    radius: 60,
-                    backgroundColor: const Color(0xFF4A9B8E),
-                    child: Text(
-                      usernameController.text.isNotEmpty ? usernameController.text.substring(0, 1).toUpperCase() : 'U',
-                      style: const TextStyle(fontSize: 50, color: Colors.white),
-                    ),
-                  ),
+            if (_profileImageUrl != null)
+              CircleAvatar(
+                radius: 60,
+                backgroundImage: NetworkImage(_profileImageUrl!),
+              )
+            else if (_profileImage != null)
+              CircleAvatar(
+                radius: 60,
+                backgroundImage: FileImage(_profileImage!),
+              )
+            else
+              CircleAvatar(
+                radius: 60,
+                backgroundColor: const Color(0xFF4A9B8E),
+                child: Text(
+                  usernameController.text.isNotEmpty ? usernameController.text.substring(0, 1).toUpperCase() : 'U',
+                  style: const TextStyle(fontSize: 50, color: Colors.white),
+                ),
+              ),
             if (isEditing)
               Positioned(
                 bottom: 0,
@@ -417,6 +443,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      child: ElevatedButton.icon(
+        onPressed: () async {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF2A2A2A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('¿Cerrar Sesión?', style: TextStyle(color: Colors.white)),
+              content: const Text('¿Estás seguro de que deseas cerrar sesión?', style: TextStyle(color: Colors.white70)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed == true) {
+            await AuthService.logout();
+            if (!mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const AuthLoginScreen()),
+              (route) => false,
+            );
+          }
+        },
+        icon: const Icon(Icons.logout, color: Colors.white),
+        label: const Text('Cerrar Sesión', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red[700],
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       ),
     );
   }

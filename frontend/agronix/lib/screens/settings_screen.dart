@@ -285,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2A2A2A),
-        title: const Text('AgroNexus', style: TextStyle(color: Colors.white)),
+        title: const Text('Agronix', style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,7 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const Text(
-              'Equipo AgroNexus',
+              'Equipo Agronix',
               style: TextStyle(color: Colors.grey),
             ),
           ],
@@ -322,45 +322,187 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showSupportDialog() {
+    final TextEditingController emailController = TextEditingController();
+    final TextEditingController messageController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        title: const Text('Soporte Técnico', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Contacto:',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF23272A),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Email: soporte@agronix.com',
-              style: TextStyle(color: Colors.grey),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4A9B8E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(Icons.support_agent, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Soporte Agronix',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  '¿Tienes dudas, problemas o sugerencias? Escríbenos:',
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: emailController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.email, color: Color(0xFF4A9B8E)),
+                    labelText: 'Tu correo',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    hintText: 'ejemplo@correo.com',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    filled: true,
+                    fillColor: const Color(0xFF181C1F),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: messageController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.message, color: Color(0xFF4A9B8E)),
+                    labelText: 'Mensaje',
+                    labelStyle: const TextStyle(color: Color(0xFF4A9B8E)),
+                    hintText: 'Escribe tu consulta o comentario...',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    filled: true,
+                    fillColor: const Color(0xFF181C1F),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF4A9B8E)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF23272A),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Color(0xFF4A9B8E), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.email, color: Color(0xFF4A9B8E), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'soporte@agronix.lat',
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Debug: print para saber si el widget se construye
+                    Builder(builder: (context) {
+                      print('Mostrando email de soporte en settings_screen');
+                      return Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              final email = emailController.text.trim();
+                              final message = messageController.text.trim();
+                              if (email.isEmpty || message.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Completa tu correo y mensaje.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+                              try {
+                                // Aquí deberías implementar el envío real, por ejemplo usando un endpoint de tu backend
+                                // await ApiService.sendSupportEmail(email, message);
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Mensaje enviado a soporte Agronix.'),
+                                    backgroundColor: Color(0xFF4A9B8E),
+                                  ),
+                                );
+                              } catch (e) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No se pudo enviar el mensaje.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.send, size: 18, color: Colors.white),
+                            label: const Text('Enviar', style: TextStyle(color: Colors.white)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4A9B8E),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ],
             ),
-            const Text(
-              'Teléfono: +51 923190931',
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Horario de atención:',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            const Text(
-              'Lunes a Viernes: 8:00 AM - 6:00 PM',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4A9B8E)),
-            child: const Text('Cerrar'),
           ),
-        ],
+        ),
       ),
     );
   }

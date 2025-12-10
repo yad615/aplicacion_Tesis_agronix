@@ -11,6 +11,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:agronix/models/calendar_event.dart';
+import 'package:agronix/services/endpoints/chatbot_endpoints.dart';
 
 class ChatBotScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -22,6 +23,65 @@ class ChatBotScreen extends StatefulWidget {
 }
 
 class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateMixin {
+    // Notificación de alertas automáticas
+    void _showAlertasCreadasNotification(List<dynamic> alertas) {
+      if (alertas.isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('⚠️ Se generó una alerta automática'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Ver',
+            textColor: Colors.white,
+            onPressed: () => _showAlertasCreadasDialog(alertas),
+          ),
+        ),
+      );
+    }
+
+    // Diálogo para mostrar alertas automáticas
+    void _showAlertasCreadasDialog(List<dynamic> alertas) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF2A2A2A),
+          title: const Text('Alertas Automáticas', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Se generaron ${alertas.length} alertas automáticas:', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 12),
+                ...alertas.map((alerta) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning, color: Colors.orange, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          alerta is String ? alerta : (alerta['mensaje'] ?? 'Alerta automática'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar', style: TextStyle(color: Color(0xFF4A9B8E))),
+            ),
+          ],
+        ),
+      );
+    }
   final TextEditingController _messageController = TextEditingController();
   final List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
@@ -52,6 +112,42 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
     super.initState();
     _setupAnimations();
     _initializeChat();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _analizarDatosDashboardYCrearTareas();
+    });
+  }
+
+  void _analizarDatosDashboardYCrearTareas() {
+    // Leer datos del dashboard
+    final cropData = widget.userData != null ? widget.userData!["crop_data"] : null;
+    List<String> tareasAuto = [];
+    List<String> alertasAuto = [];
+    if (cropData != null) {
+      // Ejemplo: crear tarea si humedad suelo baja
+      if (cropData["humidity_soil"] != null && cropData["humidity_soil"] < 35.0) {
+        tareasAuto.add("Riego urgente por humedad baja");
+        alertasAuto.add("💧 Humedad del suelo baja: ${cropData["humidity_soil"]}%");
+      }
+      if (cropData["temperature_air"] != null && cropData["temperature_air"] > 25.0) {
+        tareasAuto.add("Ventilar invernadero por temperatura alta");
+        alertasAuto.add("🔥 Temperatura del aire alta: ${cropData["temperature_air"]}°C");
+      }
+      if (cropData["pest_risk"] == "Alto") {
+        tareasAuto.add("Inspección de plagas recomendada");
+        alertasAuto.add("🐛 Riesgo de plagas alto");
+      }
+    }
+    if (tareasAuto.isNotEmpty) {
+      _addMessage("Se han creado automáticamente las siguientes tareas:", false);
+      for (final t in tareasAuto) {
+        _addMessage("• $t", false);
+      }
+      _addTasksToCalendar(tareasAuto);
+      _showTasksCreatedNotification();
+    }
+    if (alertasAuto.isNotEmpty) {
+      _showAlertasCreadasNotification(alertasAuto);
+    }
   }
 
   Future<void> _initializeChat() async {
@@ -212,45 +308,29 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
     }
   }
 
-  Future<void> _sendMessage() async {
-    // Helper: add created tasks to calendar
-    void _addTasksToCalendar(List<String> tasks) {
-      for (final task in tasks) {
-        final event = CalendarEvent(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: task,
-          description: 'Tarea creada desde el chatbot',
-          dateTime: DateTime.now(),
-          type: EventType.irrigation, // Puedes mejorar el tipo si tienes info
-          priority: Priority.medium,
-        );
-        CalendarEventBus().emit(event);
-      }
+  // Helper: agrega tareas creadas automáticamente al calendario, marcando origen IA
+  void _addTasksToCalendar(List<dynamic> tasks) {
+    for (final task in tasks) {
+      final event = CalendarEvent(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: task is String ? task : (task['title'] ?? 'Tarea IA'),
+        description: 'Tarea creada automáticamente por IA',
+        dateTime: DateTime.now(),
+        type: EventType.irrigation, // Mejorar si hay info
+        priority: Priority.medium,
+        origen: 'automatico',
+      );
+      CalendarEventBus().emit(event);
     }
+  }
+
+  Future<void> _sendMessage() async {
+    _analizarDatosDashboardYCrearTareas();
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    // Si el usuario pide datos del dashboard, responde con resumen leído
-    if (text.toLowerCase().contains('dashboard') || text.toLowerCase().contains('estadística')) {
-      final dashboardStats = [
-        'Producción Total: 2,450 kilogramos',
-        'Eficiencia de Riego: 87 por ciento',
-        'Tiempo de Crecimiento: 45 días',
-        'Calidad del Producto: 9.2 de 10',
-        'Progreso Semanal: Lun 20, Mar 35, Mié 40, Jue 30, Vie 50, Sáb 45, Dom 38',
-      ];
-      final username = widget.userData?['username'] ?? '';
-      final summary = 'Hola $username, aquí tienes el resumen de tu dashboard: ' + dashboardStats.join('. ');
-      _addMessage(summary, false);
-      _safeSetState(() {
-        _isTyping = false;
-      });
-      _typingAnimationController.stop();
-      return;
-    }
-
-    // Obtiene el nombre de usuario para mostrar en el chat
     final username = widget.userData?['username'] ?? '';
+    final parcelaId = widget.userData?['parcela_id'];
     _addMessage('$username: $text', true);
     _messageController.clear();
 
@@ -259,17 +339,17 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
     });
     _typingAnimationController.repeat();
 
-    // No se envía token, solo el header estándar
     Map<String, String> headers = {
       'Content-Type': 'application/json',
     };
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.0.233:8000/api/chatbot/'),
+        Uri.parse(ChatbotEndpoints.chat),
         headers: headers,
         body: json.encode({
           'message': text,
           'username': username,
+          'parcela_id': parcelaId,
         }),
       );
 
@@ -278,21 +358,25 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
           final Map<String, dynamic> responseData = json.decode(response.body);
           final String botResponse = responseData['response'] as String? ?? 'Respuesta vacía';
 
+          // Mostrar la respuesta tal cual, sin emojis ni modificaciones
+          await Future.delayed(const Duration(milliseconds: 1800));
+          _addMessage(botResponse, false);
+
+          // Mostrar crop_data si viene
           if (responseData.containsKey('crop_data')) {
             _currentCropData = responseData['crop_data'];
           }
 
-          if (responseData.containsKey('tasks_created')) {
-            _tasksCreated = List<String>.from(responseData['tasks_created'] ?? []);
-          }
-
-          // Simula un retraso más largo para la respuesta del bot
-          await Future.delayed(const Duration(milliseconds: 1800));
-          _addMessage(botResponse, false);
-
-          if (_tasksCreated.isNotEmpty) {
+          // Notificar tareas automáticas
+          if (responseData.containsKey('tasks_created') && responseData['tasks_created'] != null && (responseData['tasks_created'] as List).isNotEmpty) {
+            _tasksCreated = List<String>.from(responseData['tasks_created']);
             _showTasksCreatedNotification();
             _addTasksToCalendar(_tasksCreated);
+          }
+
+          // Notificar alertas automáticas y emitirlas globalmente
+          if (responseData.containsKey('acciones_creadas') && responseData['acciones_creadas'] != null && (responseData['acciones_creadas'] as List).isNotEmpty) {
+            this._showAlertasCreadasNotification(responseData['acciones_creadas']);
           }
         } else {
           _handleApiError(response);
@@ -300,7 +384,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
       }
     } catch (e) {
       if (!_isDisposed && mounted) {
-        _addMessage('🔌 Error de conexión o el servidor no responde. Revisa tu internet, la IP y el backend.\nDetalles: $e', false);
+        _addMessage('Error de conexión o el servidor no responde. Revisa tu internet, la IP y el backend.\nDetalles: $e', false);
         debugPrint('Network Error: $e');
       }
     } finally {
@@ -872,9 +956,32 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
   }
 
   Future<void> _startListening() async {
-    var status = await Permission.microphone.request();
-    if (status.isGranted) {
-      bool available = await _speechToText.initialize();
+    // Primero verificar el estado actual del permiso
+    var permissionStatus = await Permission.microphone.status;
+    
+    if (permissionStatus.isDenied) {
+      // Si está denegado, pedirlo
+      permissionStatus = await Permission.microphone.request();
+    }
+    
+    if (permissionStatus.isGranted) {
+      // Permiso concedido, inicializar speech-to-text
+      bool available = await _speechToText.initialize(
+        onError: (error) {
+          print('Error en speech: $error');
+          setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${error.errorMsg}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+        onStatus: (status) {
+          print('Estado del speech: $status');
+        },
+      );
+      
       if (available) {
         setState(() => _isListening = true);
         _speechToText.listen(
@@ -887,27 +994,62 @@ class _ChatBotScreenState extends State<ChatBotScreen> with TickerProviderStateM
             }
           },
           localeId: 'es_ES',
+          listenMode: ListenMode.confirmation,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('El reconocimiento de voz no está disponible en este dispositivo.'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
-    } else if (status.isPermanentlyDenied) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Permiso de micrófono denegado permanentemente. Ábrelo en ajustes.'),
-          backgroundColor: Colors.red,
-          action: SnackBarAction(
-            label: 'Ajustes',
-            textColor: Colors.white,
-            onPressed: () {
-              openAppSettings();
-            },
+    } else if (permissionStatus.isPermanentlyDenied) {
+      // Denegado permanentemente, debe ir a ajustes
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF2A2A2A),
+          title: const Text('Permiso Requerido', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'El permiso del micrófono está denegado permanentemente. '
+            'Para usar la función de voz, debes habilitarlo manualmente en los ajustes de la aplicación.',
+            style: TextStyle(color: Colors.white70),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                openAppSettings();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4A9B8E)),
+              child: const Text('Abrir Ajustes', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } else if (permissionStatus.isRestricted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El acceso al micrófono está restringido en este dispositivo.'),
+          backgroundColor: Colors.red,
         ),
       );
     } else {
+      // Permiso denegado esta vez
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Permiso de micrófono denegado. Actívalo en ajustes.'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: const Text('Permiso de micrófono denegado. Por favor, concede el permiso para usar esta función.'),
+          backgroundColor: Colors.orange,
+          action: SnackBarAction(
+            label: 'Reintentar',
+            textColor: Colors.white,
+            onPressed: () => _startListening(),
+          ),
         ),
       );
     }

@@ -7,4 +7,7 @@ class ParcelaEndpoints {
   static String update(int id) => '${ApiConfig.baseUrl}/api/parcelas/$id/';
   static String delete(int id) => '${ApiConfig.baseUrl}/api/parcelas/$id/';
   static String detail(int id) => '${ApiConfig.baseUrl}/api/parcelas/$id/';
+  
+  // Endpoint para subir imágenes a una parcela
+  static String uploadImages(int parcelaId) => '${ApiConfig.baseUrl}/api/parcelas/$parcelaId/images/';
 }

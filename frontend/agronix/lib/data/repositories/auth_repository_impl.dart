@@ -83,7 +83,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<UserEntity> updateProfile(Map<String, dynamic> userData) async {
     try {
       final response = await _apiClient.patch(
-        AuthEndpoints.userProfile,
+        AuthEndpoints.profile,
         userData,
       );
 
@@ -100,7 +100,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> changePassword(String oldPassword, String newPassword) async {
     try {
       await _apiClient.post(
-        '${AuthEndpoints.userProfile}change-password/',
+        AuthEndpoints.changePassword,
         {
           'old_password': oldPassword,
           'new_password': newPassword,

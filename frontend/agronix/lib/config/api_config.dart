@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String baseUrl = 'https://agro-ai-plataform-1.onrender.com';
+  static const String baseUrl = 'https://api.agronix.lat/';
   static const Duration timeout = Duration(seconds: 30);
   
   static Map<String, String> get defaultHeaders => {

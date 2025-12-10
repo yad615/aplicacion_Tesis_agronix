@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'dart:async';
 
 import 'package:agronix/screens/statistics_screen.dart';
 import 'package:agronix/screens/alerts_screen.dart';
@@ -12,7 +13,8 @@ import 'package:agronix/screens/profile_screen.dart';
 import 'package:agronix/screens/chatbot_screen.dart';
 import 'package:agronix/screens/parcelas_screen.dart';
 import 'package:agronix/widgets/dashboard_widgets.dart';
-import 'package:agronix/services/endpoints/endpoints.dart';
+import 'package:agronix/config/api_config.dart';
+import 'package:agronix/widgets/sensor_chart_widget.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -24,6 +26,79 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> with TickerProviderStateMixin {
+      @override
+      void initState() {
+        super.initState();
+        _animationController = AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 800),
+        );
+        _fadeAnimation = CurvedAnimation(
+          parent: _animationController,
+          curve: Curves.easeIn,
+        );
+        _slideAnimation = Tween<double>(begin: 40.0, end: 0.0).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+        _animationController.forward();
+        _fetchParcelasAndLoadData();
+      }
+
+  Future<void> _fetchParcelasAndLoadData() async {
+    final String? userToken = widget.userData['token'] as String?;
+    if (userToken == null) return;
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/parcelas/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $userToken',
+        },
+      );
+      if (response.statusCode == 200) {
+        final responseJson = json.decode(response.body);
+        final List<dynamic> parcelas = responseJson is List
+            ? responseJson
+            : (responseJson['results'] ?? []);
+        setState(() {
+          _parcelas = parcelas.map((p) => {
+            'id': p['id'],
+            'nombre': p['nombre'],
+          }).toList();
+        });
+        if (_parcelas.isEmpty) {
+          setState(() {
+            _isLoading = false;
+            _lastUpdateMessage = 'No se encontraron parcelas.';
+          });
+          return;
+        }
+      } else {
+        setState(() {
+          _isLoading = false;
+          _lastUpdateMessage = 'Error al obtener parcelas.';
+        });
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error al obtener parcelas en dashboard: $e');
+      setState(() {
+        _isLoading = false;
+        _lastUpdateMessage = 'Error al obtener parcelas.';
+      });
+      return;
+    }
+    await _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+    List<Map<String, dynamic>> _parcelas = [];
+    int? _selectedParcelaId;
+    String? _selectedParcelaNombre;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _slideAnimation;
@@ -33,47 +108,32 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   // Datos del cultivo que se cargarán del backend
   Map<String, dynamic>? _cropData;
   List<Map<String, dynamic>> _alerts = [];
+  List<Map<String, dynamic>> _nodosSensores = [];
+
+    // Series de sensores (últimas 24h, por hora)
+    Map<String, List<Map<String, dynamic>>> _sensorSeries = {};
 
   bool _isLoading = true;
   String _lastUpdateMessage = 'Cargando datos...';
 
-  @override
-  void initState() {
-    super.initState();
-    _setupAnimations();
-    _startAnimations();
-    _loadInitialData();
-  }
-
-  void _setupAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _slideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
-    );
-  }
-
-  void _startAnimations() {
-    _animationController.forward();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
+  // ...existing code...
 
   // Método corregido para cargar datos
   Future<void> _loadInitialData() async {
     setState(() {
       _isLoading = true;
-      _lastUpdateMessage = 'Cargando datos...';
+      _lastUpdateMessage = 'Cargando datos de sensores...';
     });
+
+    // Usar la parcela seleccionada
+    int? parcelaId = _selectedParcelaId ?? widget.userData['parcela_id'];
+    if (parcelaId == null && _parcelas.isNotEmpty) {
+      parcelaId = _parcelas[0]['id'];
+      _selectedParcelaId = parcelaId;
+      _selectedParcelaNombre = _parcelas[0]['nombre'];
+      widget.userData['parcela_id'] = parcelaId;
+      widget.userData['parcela_nombre'] = _selectedParcelaNombre;
+    }
 
     final String? userToken = widget.userData['token'] as String?;
     if (userToken == null || userToken.isEmpty) {
@@ -85,43 +145,64 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       return;
     }
 
+    // Obtener parcela_id solo si aún no está definido
+    if (parcelaId == null) {
+      parcelaId = await _obtenerPrimeraParcelaId();
+      if (parcelaId == null) {
+        setState(() {
+          _isLoading = false;
+          _lastUpdateMessage = 'No se encontraron parcelas.';
+        });
+        return;
+      }
+      widget.userData['parcela_id'] = parcelaId;
+    }
+
     try {
       final response = await http.get(
-        Uri.parse(ChatbotEndpoints.cropData),
+        Uri.parse(
+            '${ApiConfig.baseUrl}/api/brain/nodes/latest/?parcela=$parcelaId'
+        ),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $userToken',
+          'Authorization': 'Token $userToken', // ← Token NO Bearer
         },
       );
-      
+
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
-        
-        if (responseData['success'] == true && responseData.containsKey('crop_data')) {
-          setState(() {
-            _cropData = responseData['crop_data'];
-            
-            if (_cropData!['last_updated'] is String) {
-              _cropData!['last_updated'] = DateTime.parse(_cropData!['last_updated']);
-            }
-            
-            _lastUpdateMessage = 'Última actualización: ${DateFormat('dd/MM/yyyy HH:mm').format(_cropData!['last_updated'])}';
-            _updateAlertsBasedOnData();
-          });
-        } else {
-          debugPrint("Backend no devolvió datos válidos: $responseData");
-          await _generateFreshSimulatedData();
-        }
+        _procesarDatosSensores(responseData);
+        setState(() {
+          _lastUpdateMessage = 'Última actualización: ${
+            DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())
+          }';
+          _isLoading = false;
+        });
+
+          // Cargar series de sensores (últimas 24h, por hora)
+          await _loadSensorSeries(parcelaId, userToken);
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _isLoading = false;
+          _lastUpdateMessage = 'Sesión expirada.';
+        });
+        // TODO: Navegar a login
       } else {
-        debugPrint('Error HTTP: ${response.statusCode} - ${response.body}');
-        await _generateFreshSimulatedData();
+        debugPrint('Error HTTP: ${response.statusCode}');
+        setState(() {
+          _isLoading = false;
+          _lastUpdateMessage = 'Error al obtener datos reales del backend.';
+        });
       }
     } catch (e) {
       debugPrint('Excepción: $e');
       if (mounted) {
-        await _generateFreshSimulatedData();
+        setState(() {
+          _isLoading = false;
+          _lastUpdateMessage = 'Error al obtener datos reales del backend.';
+        });
       }
     } finally {
       if (mounted) {
@@ -132,26 +213,112 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     }
   }
 
-  Future<void> _generateFreshSimulatedData() async {
+  Future<int?> _obtenerPrimeraParcelaId() async {
+    final String? userToken = widget.userData['token'] as String?;
+    if (userToken == null) return null;
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/parcelas/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $userToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> parcelas = json.decode(response.body);
+        if (parcelas.isNotEmpty) {
+          final id = parcelas[0]['id'] as int;
+          widget.userData['parcela_id'] = id;
+          widget.userData['parcela_nombre'] = parcelas[0]['nombre'];
+          return id;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al obtener parcela_id: $e');
+    }
+    return null;
+  }
+
+  void _procesarDatosSensores(Map<String, dynamic> responseData) {
+    final List<dynamic> nodos = responseData['nodos'] ?? [];
+
+    if (nodos.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _lastUpdateMessage = 'No hay datos reales disponibles.';
+        _cropData = null;
+        _nodosSensores = [];
+      });
+      return;
+    }
+
+    // Guardar nodos y sensores para mostrar dinámicamente
+    List<Map<String, dynamic>> nodosSensores = [];
+    for (var nodo in nodos) {
+      nodosSensores.add({
+        'nombre': nodo['nombre'] ?? 'Nodo',
+        'activo': nodo['activo'] ?? false,
+        'sensores': nodo['sensores'] ?? {},
+      });
+    }
+
+    double totalTemp = 0.0, totalHumedadAire = 0.0;
+    double totalCE = 0.0, totalPH = 0.0;
+    int countTemp = 0, countHumedadAire = 0, countCE = 0, countPH = 0;
+
+    for (var nodo in nodos) {
+      if (nodo['activo'] == true) {
+        final Map<String, dynamic> sensores = nodo['sensores'] ?? {};
+
+        if (sensores.containsKey('temperatura')) {
+          totalTemp += (sensores['temperatura'] as num).toDouble();
+          countTemp++;
+        }
+        if (sensores.containsKey('humedad_aire')) {
+          totalHumedadAire += (sensores['humedad_aire'] as num).toDouble();
+          countHumedadAire++;
+        }
+        if (sensores.containsKey('ce')) {
+          totalCE += (sensores['ce'] as num).toDouble();
+          countCE++;
+        }
+        if (sensores.containsKey('ph')) {
+          totalPH += (sensores['ph'] as num).toDouble();
+          countPH++;
+        }
+      }
+    }
+
+    final double avgTemp = countTemp > 0 ? totalTemp / countTemp : 22.0;
+    final double avgHumedadAire = countHumedadAire > 0 ? totalHumedadAire / countHumedadAire : 65.0;
+    final double avgCE = countCE > 0 ? totalCE / countCE : 1.0;
+
     setState(() {
       _cropData = {
-        'temperature_air': double.parse((18.0 + Random().nextDouble() * 10.0).toStringAsFixed(1)),
-        'humidity_air': double.parse((55.0 + Random().nextDouble() * 30.0).toStringAsFixed(1)),
-        'humidity_soil': double.parse((30.0 + Random().nextDouble() * 40.0).toStringAsFixed(1)),
-        'conductivity_ec': double.parse((0.5 + Random().nextDouble() * 1.0).toStringAsFixed(2)),
-        'temperature_soil': double.parse((12.0 + Random().nextDouble() * 16.0).toStringAsFixed(1)),
-        'solar_radiation': double.parse((250.0 + Random().nextDouble() * 600.0).toStringAsFixed(1)),
-        'pest_risk': ['Bajo', 'Moderado', 'Alto'][Random().nextInt(3)],
+        'temperature_air': double.parse(avgTemp.toStringAsFixed(1)),
+        'humidity_air': double.parse(avgHumedadAire.toStringAsFixed(1)),
+        'humidity_soil': double.parse(avgHumedadAire.toStringAsFixed(1)),
+        'conductivity_ec': double.parse(avgCE.toStringAsFixed(2)),
+        'temperature_soil': double.parse((avgTemp - 5).toStringAsFixed(1)),
+        'solar_radiation': 500.0,
+        'pest_risk': _calcularRiesgoPlagas(avgTemp, avgHumedadAire),
         'last_updated': DateTime.now(),
+        'nodos_activos': nodos.where((n) => n['activo'] == true).length,
+        'nodos_totales': nodos.length,
       };
-      _lastUpdateMessage = 'Última actualización: ${DateFormat('dd/MM/yyyy HH:mm').format(_cropData!['last_updated'])}';
+      _nodosSensores = nodosSensores;
       _updateAlertsBasedOnData();
     });
   }
 
-  Future<void> _refreshData() async {
-    await _loadInitialData();
+  String _calcularRiesgoPlagas(double temp, double humedad) {
+    if (temp > 25 && humedad > 70) return 'Alto';
+    if (temp > 22 && humedad > 60) return 'Moderado';
+    return 'Bajo';
   }
+
 
   void _updateAlertsBasedOnData() {
     if (_cropData == null) return; 
@@ -206,6 +373,31 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       });
     }
 
+    // Alertas de nodos
+    if (_cropData!.containsKey('nodos_activos') &&
+        _cropData!.containsKey('nodos_totales')) {
+      final int activos = _cropData!['nodos_activos'];
+      final int totales = _cropData!['nodos_totales'];
+
+      if (activos == 0) {
+        newAlerts.add({
+          'message': '⚠️ Todos los nodos están desconectados - Revisar urgente',
+          'type': 'critical',
+          'color': Colors.red,
+          'icon': Icons.sensors_off,
+          'isNew': true
+        });
+      } else if (activos < totales) {
+        newAlerts.add({
+          'message': '📡 ${totales - activos} nodo(s) inactivo(s) - Verificar conexión',
+          'type': 'warning',
+          'color': Colors.orange,
+          'icon': Icons.wifi_off,
+          'isNew': true
+        });
+      }
+    }
+
     newAlerts.add({
       'message': '📅 Cosecha programada mañana 8:00 a.m.',
       'type': 'schedule', 'color': Colors.blue, 'icon': Icons.calendar_today, 'isNew': false
@@ -233,10 +425,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       case 'conductivity_ec':
         if (value < 0.7) return 'Bajo';
         if (value > 1.2) return 'Alto';
-        return 'Óptimo';
-      case 'temperature_soil':
-        if (value < 15.0) return 'Bajo';
-        if (value > 25.0) return 'Alto';
         return 'Óptimo';
       case 'solar_radiation':
         if (value < 300.0) return 'Bajo';
@@ -313,92 +501,49 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           ],
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+          Row(
+            children: [
+              ClipRRect(
                 borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.eco, color: Colors.white, size: 24),
+                ),
               ),
-              child: const Icon(Icons.eco, color: Colors.white, size: 24),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '¡Hola, ${widget.userData['username'] ?? 'Usuario'}!',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  DateFormat('dd MMMM HH:mm').format(DateTime.now()),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _isLoading ? null : _refreshData,
-            icon: _isLoading 
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : const Icon(Icons.refresh, color: Colors.white),
-          ),
-          IconButton(
-            onPressed: () {
-              setState(() {
-                _selectedIndex = 3; 
-              });
-            },
-            icon: Stack(
-              children: [
-                const Icon(Icons.notifications_outlined, color: Colors.white),
-                if (_alerts.isNotEmpty)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 12,
-                        minHeight: 12,
-                      ),
-                      child: Text(
-                        '${_alerts.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '¡Hola, ${widget.userData['username'] ?? 'Usuario'}!',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-              ],
-            ),
+                    Text(
+                      DateFormat('dd MMMM HH:mm').format(DateTime.now()),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
+          // Eliminado selector de parcela del header. Ahora solo aparece abajo en el dashboard.
         ],
       ),
     );
@@ -416,17 +561,74 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
               offset: Offset(0, _slideAnimation.value),
               child: Column(
                 children: [
-                  _buildLastUpdate(),
-                  const SizedBox(height: 20),
-                  _isLoading ? _buildLoadingCards() : _buildCropStatusCards(),
-                  const SizedBox(height: 20),
-                  _buildAlertsSection(),
-                  const SizedBox(height: 20),
-                  _buildQuickActions(),
-                  const SizedBox(height: 80),
+                  // Selector de parcela (visual, claro, fuera del header)
+                  if (_parcelas.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.landscape, color: Color(0xFF4A9B8E)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButton<int>(
+                              value: _selectedParcelaId,
+                              dropdownColor: const Color(0xFF2A2A2A),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                              isExpanded: true,
+                              items: _parcelas.map((parcela) {
+                                return DropdownMenuItem<int>(
+                                  value: parcela['id'],
+                                  child: Text(parcela['nombre'] ?? 'Parcela'),
+                                );
+                              }).toList(),
+                              onChanged: (int? newId) async {
+                                if (newId == null) return;
+                                final selected = _parcelas.firstWhere((p) => p['id'] == newId);
+                                setState(() {
+                                  _selectedParcelaId = newId;
+                                  _selectedParcelaNombre = selected['nombre'];
+                                  widget.userData['parcela_id'] = newId;
+                                  widget.userData['parcela_nombre'] = selected['nombre'];
+                                });
+                                await _loadInitialData();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_parcelas.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: Colors.white70),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No se encontraron parcelas. Crea una para comenzar.',
+                              style: TextStyle(color: Colors.white70, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Solo mostrar datos si hay parcela seleccionada
+                  if (_selectedParcelaId != null)
+                    ...[
+                      _buildLastUpdate(),
+                      const SizedBox(height: 20),
+                      _isLoading ? _buildLoadingCards() : _buildCropStatusCards(),
+                      const SizedBox(height: 20),
+                      _buildAlertsSection(),
+                      const SizedBox(height: 20),
+                      _buildQuickActions(),
+                      const SizedBox(height: 80),
+                    ],
                 ],
-              ),
-            );
+              )
+              );
           },
         ),
       ),
@@ -509,60 +711,347 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   }
 
   Widget _buildCropStatusCards() {
-    if (_cropData == null) {
+    if (_nodosSensores.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    // Mostrar nodos que tengan datos en cualquier sensor relevante
+    final nodosConDatos = _nodosSensores.where((nodo) {
+      final sensores = nodo['sensores'] as Map<String, dynamic>;
+      final tieneTemp = sensores.containsKey('temperatura') && sensores['temperatura'] != null;
+      final tieneHumedadAire = sensores.containsKey('humedad_aire') && sensores['humedad_aire'] != null;
+      final tieneHumedadSuelo = sensores.containsKey('humedad_suelo') && sensores['humedad_suelo'] != null;
+      return tieneTemp || tieneHumedadAire || tieneHumedadSuelo;
+    }).toList();
+    if (nodosConDatos.isEmpty) {
       return const SizedBox.shrink();
     }
     return Column(
       children: [
+        ...nodosConDatos.map((nodo) {
+          final sensores = nodo['sensores'] as Map<String, dynamic>;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF23272A),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+              border: Border.all(
+                color: nodo['activo'] ? const Color(0xFF4A9B8E) : Colors.red,
+                width: 1.2,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (sensores.containsKey('temperatura') && sensores['temperatura'] != null) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.thermostat, color: Colors.grey[400], size: 18),
+                              const SizedBox(width: 6),
+                              Text('Temperatura', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${sensores['temperatura']}°C',
+                            style: TextStyle(color: Colors.grey[400], fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[700]?.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getParameterStatus('temperature_air', (sensores['temperatura'] as num).toDouble()),
+                              style: TextStyle(
+                                color: _getStatusColor(_getParameterStatus('temperature_air', (sensores['temperatura'] as num).toDouble())),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (sensores.containsKey('humedad_aire') && sensores['humedad_aire'] != null) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.water_drop, color: Colors.grey[400], size: 18),
+                              const SizedBox(width: 6),
+                              Text('Humedad Aire', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${sensores['humedad_aire']}%',
+                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(_getParameterStatus('humidity_air', (sensores['humedad_aire'] as num).toDouble())).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getParameterStatus('humidity_air', (sensores['humedad_aire'] as num).toDouble()),
+                              style: TextStyle(
+                                color: _getStatusColor(_getParameterStatus('humidity_air', (sensores['humedad_aire'] as num).toDouble())),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (sensores.containsKey('humedad_suelo') && sensores['humedad_suelo'] != null) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.grass, color: Colors.green, size: 18),
+                              const SizedBox(width: 6),
+                              Text('Humedad Suelo', style: TextStyle(color: Colors.green, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${sensores['humedad_suelo']}%',
+                            style: TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getParameterStatus('humidity_soil', (sensores['humedad_suelo'] as num).toDouble()),
+                              style: TextStyle(
+                                color: _getStatusColor(_getParameterStatus('humidity_soil', (sensores['humedad_suelo'] as num).toDouble())),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+    // Consulta series de sensores (últimas 24h, por hora)
+    Future<void> _loadSensorSeries(int parcelaId, String userToken) async {
+      final parametros = ['temperatura', 'humedad_aire', 'humedad_suelo'];
+      final period = 'hour';
+      final interval = '1';
+      final end = DateTime.now();
+      final start = end.subtract(const Duration(hours: 24));
+      final startStr = DateFormat('yyyy-MM-dd').format(start);
+      final endStr = DateFormat('yyyy-MM-dd').format(end);
+
+      Map<String, List<Map<String, dynamic>>> series = {};
+      for (final parametro in parametros) {
+        final url = '${ApiConfig.baseUrl}/api/brain/series/?parcela=$parcelaId&parametro=$parametro&period=$period&interval=$interval&start=$startStr&end=$endStr';
+        try {
+          final response = await http.get(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Token $userToken',
+            },
+          );
+          if (response.statusCode == 200) {
+            final respJson = json.decode(response.body);
+            if (respJson is Map<String, dynamic> && respJson.containsKey('points')) {
+              series[parametro] = List<Map<String, dynamic>>.from(respJson['points']);
+            } else if (respJson is List) {
+              series[parametro] = List<Map<String, dynamic>>.from(respJson);
+            } else {
+              series[parametro] = [];
+            }
+          } else {
+            series[parametro] = [];
+          }
+        } catch (e) {
+          series[parametro] = [];
+        }
+      }
+      setState(() {
+        _sensorSeries = series;
+      });
+    }
+
+    // Widget para mostrar series de sensores
+      // Widget para mostrar nodos y sensores dinámicamente
+      Widget _buildNodosSensoresSection() {
+    if (_nodosSensores.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Row(
           children: [
-            Expanded(
-              child: DashboardWidgets.buildCropStatusCard(
-                '🌡️ Temperatura del Aire',
-                '${_cropData!['temperature_air']}°C',
-                _getParameterStatus('temperature_air', _cropData!['temperature_air'] as double),
-                _getStatusColor(_getParameterStatus('temperature_air', _cropData!['temperature_air'] as double)),
-                Icons.thermostat,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DashboardWidgets.buildCropStatusCard(
-                '💧 Humedad Relativa',
-                '${_cropData!['humidity_air']}%',
-                _getParameterStatus('humidity_air', _cropData!['humidity_air'] as double),
-                _getStatusColor(_getParameterStatus('humidity_air', _cropData!['humidity_air'] as double)),
-                Icons.water_drop,
-              ),
-            ),
+            const Icon(Icons.sensors, color: Color(0xFF4A9B8E), size: 22),
+            const SizedBox(width: 8),
+            const Text('Sensores por Nodo', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: DashboardWidgets.buildCropStatusCard(
-                '🌱 Humedad del Suelo',
-                '${_cropData!['humidity_soil']}%',
-                _getParameterStatus('humidity_soil', _cropData!['humidity_soil'] as double),
-                _getStatusColor(_getParameterStatus('humidity_soil', _cropData!['humidity_soil'] as double)),
-                Icons.grass,
+        ..._nodosSensores.map((nodo) {
+          final sensores = nodo['sensores'] as Map<String, dynamic>;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF23272A),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(
+                color: nodo['activo'] ? const Color(0xFF4A9B8E) : Colors.red,
+                width: 1.2,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DashboardWidgets.buildCropStatusCard(
-                '⚡ Conductividad',
-                '${_cropData!['conductivity_ec']} dS/m',
-                _getParameterStatus('conductivity_ec', _cropData!['conductivity_ec'] as double),
-                _getStatusColor(_getParameterStatus('conductivity_ec', _cropData!['conductivity_ec'] as double)),
-                Icons.bolt,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: nodo['activo'] ? const Color(0xFF4A9B8E) : Colors.red,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          nodo['activo'] ? Icons.sensors : Icons.sensors_off,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          nodo['nombre'],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: nodo['activo'] ? Colors.green : Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          nodo['activo'] ? 'Activo' : 'Inactivo',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: sensores.entries.map((entry) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4A9B8E),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Text(
+                                _getSensorLabel(entry.key),
+                                style: const TextStyle(color: Color(0xFF4A9B8E), fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${entry.value}',
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          );
+        }),
       ],
     );
+  }
+  // Etiquetas bonitas para sensores
+  String _getSensorLabel(String key) {
+    switch (key) {
+      case 'temperatura':
+        return '🌡️ Temperatura';
+      case 'humedad_aire':
+        return '💧 Humedad Aire';
+      case 'humedad_suelo':
+        return '🌱 Humedad Suelo';
+      case 'ce':
+        return '⚡ Conductividad';
+      case 'ph':
+        return '🧪 pH';
+      default:
+        return key;
+    }
+  }
+
+  String _getParametroLabel(String parametro) {
+    switch (parametro) {
+      case 'temperatura':
+        return '🌡️ Temperatura';
+      case 'humedad_aire':
+        return '💧 Humedad Aire';
+      case 'humedad_suelo':
+        return '🌱 Humedad Suelo';
+      default:
+        return parametro;
+    }
   }
 
   Widget _buildAlertsSection() {
@@ -732,13 +1221,59 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
               onTap: () => _showActionDialog(),
             ),
             DashboardWidgets.buildQuickActionButton(
-              'Parcelas',
-              Icons.landscape,
-              Colors.green,
+              'Ver Sensores',
+              Icons.sensors,
+              Colors.blue,
               onTap: () {
-                setState(() {
-                  _selectedIndex = 2;
-                });
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.black,
+                  builder: (context) => SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Series de Sensores (últimas 24h, por hora)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 12),
+                          ..._sensorSeries.entries
+                            .where((entry) => entry.value.isNotEmpty)
+                            .map((entry) {
+                              final parametro = entry.key;
+                              final series = entry.value;
+                              Color color;
+                              switch (parametro) {
+                                case 'temperatura':
+                                  color = Colors.redAccent;
+                                  break;
+                                case 'humedad_aire':
+                                  color = Colors.blueAccent;
+                                  break;
+                                case 'humedad_suelo':
+                                  color = Colors.green;
+                                  break;
+                                default:
+                                  color = Colors.grey;
+                              }
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_getParametroLabel(parametro), style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    height: 180,
+                                    child: SensorChartWidget(series: series, label: _getParametroLabel(parametro), color: color),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              );
+                            }).toList(),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
               },
             ),
             DashboardWidgets.buildQuickActionButton(
@@ -754,32 +1289,30 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   }
 
   Widget _buildFloatingButtons() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Botón para crear tarea
-        FloatingActionButton(
-          heroTag: 'create_task',
-          onPressed: () => _showCreateTaskDialog(),
-          backgroundColor: Colors.orange,
-          child: const Icon(Icons.add_task, color: Colors.white),
-        ),
-        const SizedBox(height: 12),
-        // Botón del chatbot
-        FloatingActionButton(
-          heroTag: 'chat',
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => ChatBotScreen(userData: widget.userData),
-            );
-          },
-          backgroundColor: const Color(0xFF4A9B8E),
-          child: const Icon(Icons.chat, color: Colors.white),
-        ),
-      ],
+    return FloatingActionButton(
+      heroTag: 'chat',
+      onPressed: () {
+        // Buscar el primer nodo activo
+        Map<String, dynamic>? nodoPrincipal;
+        if (_nodosSensores.isNotEmpty) {
+          nodoPrincipal = _nodosSensores.firstWhere(
+            (n) => n['activo'] == true,
+            orElse: () => _nodosSensores[0],
+          );
+        }
+        final userDataWithDashboard = Map<String, dynamic>.from(widget.userData);
+        userDataWithDashboard['nodo_data'] = nodoPrincipal;
+        userDataWithDashboard['crop_data'] = nodoPrincipal != null ? nodoPrincipal['sensores'] : null;
+        userDataWithDashboard['alerts'] = _alerts;
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => ChatBotScreen(userData: userDataWithDashboard),
+        );
+      },
+      backgroundColor: const Color(0xFF4A9B8E),
+      child: const Icon(Icons.chat, color: Colors.white),
     );
   }
 

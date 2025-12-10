@@ -1,7 +1,7 @@
 import '../../config/api_config.dart';
 
 class ChatbotEndpoints {
-  static String get cropData => '${ApiConfig.baseUrl}/chatbot/crop-data/';
-  static String get chat => '${ApiConfig.baseUrl}/chatbot/chat/';
-  static String get history => '${ApiConfig.baseUrl}/chatbot/history/';
+  static String get cropData => '${ApiConfig.baseUrl}/api/chatbot/crop-data/';
+  static String get chat => '${ApiConfig.baseUrl}/api/chatbot/';
+  static String get history => '${ApiConfig.baseUrl}/api/chatbot/history/';
 }

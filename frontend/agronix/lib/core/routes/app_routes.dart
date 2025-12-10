@@ -1,10 +1,15 @@
 // lib/core/routes/app_routes.dart
 
 class AppRoutes {
-  // Auth Routes
+  // Auth Routes (Sistema original)
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  
+  // Auth Routes (Nuevo sistema con validación de agricultor) 🔒
+  static const String authSplash = '/auth-splash';
+  static const String authLogin = '/auth-login';
+  static const String authProfile = '/auth-profile';
   
   // Main Routes
   static const String dashboard = '/dashboard';
@@ -30,3 +35,4 @@ class AppRoutes {
   static const String taskCreate = '/task-create';
   static const String taskEdit = '/task-edit';
 }
+

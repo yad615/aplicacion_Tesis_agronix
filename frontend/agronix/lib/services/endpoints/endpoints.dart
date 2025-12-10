@@ -5,3 +5,4 @@ export 'plan_endpoints.dart';
 export 'sensor_endpoints.dart';
 export 'alert_endpoints.dart';
 export 'task_endpoints.dart';
+export 'user_endpoints.dart';

@@ -28,12 +28,24 @@ enum Priority {
 }
 
 class CalendarEvent {
+    Map<String, dynamic> toJson() {
+      return {
+        'id': id,
+        'title': title,
+        'description': description,
+        'date_time': dateTime.toIso8601String(),
+        'type': type.toString().split('.').last,
+        'priority': priority.toString().split('.').last,
+        'origen': origen,
+      };
+    }
   final String id;
   final String title;
   final String description;
   final DateTime dateTime;
   final EventType type;
   final Priority priority;
+  final String origen; // 'manual' o 'automatico'
 
   CalendarEvent({
     required this.id,
@@ -42,6 +54,7 @@ class CalendarEvent {
     required this.dateTime,
     required this.type,
     required this.priority,
+    required this.origen,
   });
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) {
@@ -52,6 +65,7 @@ class CalendarEvent {
       dateTime: DateTime.parse(json['scheduled_date'] ?? json['date_time'] ?? DateTime.now().toIso8601String()),
       type: _parseEventType(json['task_type'] ?? json['type']),
       priority: _parsePriority(json['priority']),
+      origen: json['origen'] ?? 'manual',
     );
   }
 

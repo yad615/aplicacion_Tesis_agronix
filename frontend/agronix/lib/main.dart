@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+// import eliminado porque se usa calendario externo
 import 'package:provider/provider.dart';
 
 // Core
@@ -49,27 +50,7 @@ class AgroNixApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Auth ViewModel
-        ChangeNotifierProvider(
-          create: (_) => AuthViewModel(AuthRepositoryImpl()),
-        ),
-        // Dashboard ViewModel
-        ChangeNotifierProvider(
-          create: (_) => DashboardViewModel(
-            ParcelaRepositoryImpl(),
-            TaskRepositoryImpl(),
-            AlertRepositoryImpl(),
-          ),
-        ),
-        // Parcelas ViewModel
-        ChangeNotifierProvider(
-          create: (_) => ParcelasViewModel(ParcelaRepositoryImpl()),
-        ),
-        // Calendar ViewModel
-        ChangeNotifierProvider(
-          create: (_) => CalendarViewModel(TaskRepositoryImpl()),
-        ),
-        // Alerts ViewModel
+        // ...existing code...
         ChangeNotifierProvider(
           create: (_) => AlertsViewModel(AlertRepositoryImpl()),
         ),
@@ -80,7 +61,7 @@ class AgroNixApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.light,
-        initialRoute: AppRoutes.splash,
+        initialRoute: AppRoutes.splash, 
         routes: {
           AppRoutes.splash: (context) => const SplashScreen(),
           AppRoutes.login: (context) => const LoginView(),
